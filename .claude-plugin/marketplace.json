@@ -5,7 +5,7 @@
   },
   "metadata": {
     "description": "Agent skills by John Wiseman",
-    "version": "0.1.1"
+    "version": "0.2.0"
   },
   "plugins": [
     {
@@ -17,6 +17,16 @@
       "skills": [
         "./skills/search-atc-audio",
         "./skills/transcribe-audio"
+      ]
+    },
+    {
+      "name": "satellite-imagery",
+      "description": "Find aircraft and ships in Sentinel-2 optical and Sentinel-1 radar imagery: per-pixel imaging times, matching colour-fringed aircraft streaks to ADS-B tracks, ship candidates and motion, and radar ship detection with fixed-object and ghost (azimuth-ambiguity) flags",
+      "version": "0.1.0",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/sentinel-aircraft-ships"
       ]
     }
   ]

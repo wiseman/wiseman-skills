@@ -101,6 +101,68 @@ the specific files (names, count and size) before fetching anything. It doesn't
 download in bulk or on speculation. LiveATC is a volunteer-fed service, so please
 use it in line with the terms of use on [liveatc.net](https://www.liveatc.net).
 
+## satellite-imagery
+
+One skill, **`sentinel-aircraft-ships`**, for finding aircraft and ships in free
+Copernicus Sentinel satellite imagery anywhere in the world:
+
+- **Sentinel-2 (optical)** — find the passes over a place and the exact moment each
+  pixel was imaged (not the misleading strip time), check whether an ADS-B-tracked
+  aircraft appears in a scene, or work out which aircraft made a colour-fringed streak.
+  It models the band-by-band timing and parallax that produce the red/green/blue
+  fringe, fits the ADS-B track to within a pixel, flags false matches (fields, roads,
+  cloud, contrails) and writes an overlay image. It also finds ship candidates, renders
+  crops, and measures a ship's speed and course from two sightings.
+- **Sentinel-1 (radar)** — detect ships by day or night and through cloud, flag fixed
+  objects (seen in earlier passes, or at mapped bridges, turbines and platforms) and
+  azimuth-ambiguity "ghosts", and predict where a moving ship lands in the image. It
+  includes a recipe for checking whether something in a radar image is a real target
+  or an artefact. In an AIS benchmark it found every ship of 100 m or more, with about
+  1.5 unexplained detections per 1000 km².
+
+### Prerequisites
+
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) and network access. The
+  two scripts declare their Python dependencies inline, and `uv run` installs them
+  automatically.
+- **Imagery** needs no account: it comes from the Earth Search STAC (Element84) and AWS
+  open data, Microsoft Planetary Computer, the Copernicus Data Space catalogue and the
+  Copernicus DEM on AWS.
+- **ADS-B** for checking aircraft can come from any source: pass a CSV of
+  `time,lat,lon,alt_geom_ft,alt_baro_ft` with `--track`. Looking aircraft up by ICAO hex,
+  and `identify` (which aircraft made this streak?), use the
+  [Hexbird](https://hexbird.io) HTTP API: set `HEXBIRD_TOKEN` (and optionally
+  `HEXBIRD_API_BASE`).
+- **Mapped structures** (OpenStreetMap bridges, turbines, platforms) in the radar ship
+  detector also come from Hexbird. Without a token the detector says so and relies on
+  comparing earlier passes to flag fixed objects.
+
+### Install
+
+In Claude Code:
+
+```
+/plugin marketplace add wiseman/wiseman-skills
+/plugin install satellite-imagery@wiseman-skills
+```
+
+Claude Code lists the skill as `satellite-imagery:sentinel-aircraft-ships`.
+
+### Example prompts
+
+- "Did Sentinel-2 catch BAW123 over the Channel on 14 October? Here's its ADS-B track as
+  a CSV."
+- "This Copernicus Browser crop at 50.72, -0.21 shows a red-green-blue streak. Which
+  aircraft was it?"
+- "A helicopter's ADS-B went altitude-only offshore near Brighton around 10:40Z. Can you
+  find the ship it landed on?"
+- "Are these two faint dots behind the ships in this Sentinel-1 image ghosts or other
+  vessels?"
+- "When did Sentinel-1 last image 57.45, 11.45, and are there ships there?"
+
+Images made from the data should carry the credit "Contains modified Copernicus
+Sentinel data [year]".
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
