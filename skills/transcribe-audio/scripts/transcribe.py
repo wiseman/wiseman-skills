@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import platform
 import re
 import subprocess
 import sys
@@ -53,7 +54,8 @@ def eprint(*a):
 
 
 def run(cmd: list[str]) -> str:
-    res = subprocess.run(cmd, capture_output=True, text=True)
+    res = subprocess.run(cmd, capture_output=True, text=True,
+                         encoding="utf-8", errors="replace")
     if res.returncode != 0:
         raise RuntimeError(f"command failed: {' '.join(cmd)}\n{res.stderr.strip()}")
     return res.stdout.strip()
@@ -130,14 +132,17 @@ def transcribe_one(client, path: Path, *, model: str, response_format: str,
                    language: str | None, prompt: str | None, want_segments: bool):
     """Single API call. Returns (text, segments) where segments is a list of
     dicts {start,end,text} (empty unless want_segments and model supports it)."""
-    kwargs = dict(model=model, file=path.open("rb"), response_format=response_format)
+    kwargs = dict(model=model, response_format=response_format)
     if language:
         kwargs["language"] = language
     if prompt:
         kwargs["prompt"] = prompt
     if want_segments and model == TIMESTAMP_MODEL:
         kwargs["timestamp_granularities"] = ["segment"]
-    resp = client.audio.transcriptions.create(**kwargs)
+    # Close uploads before temporary files are removed, including on API errors.
+    # Windows does not allow deleting a file while this handle is still open.
+    with path.open("rb") as audio:
+        resp = client.audio.transcriptions.create(file=audio, **kwargs)
 
     if response_format == "verbose_json":
         segs = [{"start": s.start, "end": s.end, "text": s.text.strip()}
@@ -206,7 +211,8 @@ def condense_silence(src: Path, dst: Path, *, noise_db: float, min_silence: floa
          "-f", "s16le", "-acodec", "pcm_s16le", "pipe:1"],
         capture_output=True)
     if res.returncode != 0:
-        raise RuntimeError(f"ffmpeg silencedetect failed on {src}:\n{res.stderr.decode()[-2000:]}")
+        raise RuntimeError(f"ffmpeg silencedetect failed on {src}:\n"
+                           f"{res.stderr.decode(errors='replace')[-2000:]}")
     pcm, log = res.stdout, res.stderr.decode(errors="replace")
     total = len(pcm) / 2 / SR
 
@@ -264,6 +270,10 @@ def split_points(total: float, n: int) -> list[tuple[float, float]]:
 
 
 def main():
+    # Redirected stdout can otherwise use a legacy Windows code page, which
+    # cannot represent every language returned by either transcription backend.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(
         description="Transcribe audio with OpenAI (OPENAI_API_KEY) or locally with mlx-whisper.")
     ap.add_argument("files", nargs="+", help="audio file(s): mp3 m4a wav mp4 webm flac ogg ...")
@@ -306,9 +316,13 @@ def main():
     backend = args.backend if args.backend != "auto" else ("openai" if has_key else "local")
     if backend == "openai" and not has_key:
         eprint("ERROR: set OPENAI_API_KEY in your environment first (do not pass keys on the CLI), "
-               "or use --backend local.")
+               "or use --backend local on macOS with Apple Silicon.")
         sys.exit(2)
     local = backend == "local"
+    if local and (sys.platform != "darwin" or platform.machine().lower() != "arm64"):
+        eprint("ERROR: the local backend requires macOS with Apple Silicon (arm64). "
+               "On this system, set OPENAI_API_KEY and use --backend openai.")
+        sys.exit(2)
 
     want_ts = args.timestamps or args.srt or args.fmt in ("segments", "srt", "verbose_json")
     fmt = args.fmt or ("srt" if args.srt else "segments" if want_ts else "text")
@@ -442,7 +456,7 @@ def main():
 
     result = "\n\n".join(c for c in out_chunks if c) + "\n"
     if args.output:
-        Path(args.output).expanduser().write_text(result)
+        Path(args.output).expanduser().write_text(result, encoding="utf-8")
         eprint(f"wrote {args.output}")
     else:
         sys.stdout.write(result)

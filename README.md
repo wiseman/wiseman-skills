@@ -1,7 +1,8 @@
 # wiseman-skills
 
-Agent skills for [Claude Code](https://claude.com/claude-code) and other tools that
-support [Agent Skills](https://agentskills.io).
+Agent skills for [Claude Code](https://claude.com/claude-code),
+[Codex CLI](https://developers.openai.com/codex/cli), and other tools that support
+[Agent Skills](https://agentskills.io).
 
 ## atc-audio
 
@@ -28,12 +29,17 @@ Two skills for working with air traffic control radio:
   the Whisper model from Hugging Face (about 1.5 GB for `large-v3-turbo`).
 - **Anywhere else**, set `OPENAI_API_KEY` in your environment to use OpenAI's API
   (paid, roughly $0.006 per minute of audio).
-- **LiveATC downloads** go through your own browser, so you need a browser tool such
-  as the [Claude in Chrome](https://claude.com/chrome) extension.
+- **If `OPENAI_API_KEY` is set**, transcription uses OpenAI's paid API by default, even
+  on a Mac. Ask for local transcription if you'd rather keep audio on your machine.
+- **LiveATC downloads** go through your own browser, using a browser tool your agent
+  supports, such as [Claude in Chrome](https://claude.com/chrome). Without one, you can
+  download the files yourself and give the agent their paths.
 - **ADS-B data** makes `search-atc-audio` much more useful: any source of aircraft
   tracks for the time and place you're looking at.
 
 ### Install
+
+#### Claude Code
 
 In Claude Code:
 
@@ -46,9 +52,40 @@ In Claude Code:
 `transcribe-audio`. Claude Code lists them with the plugin name in front, as
 `atc-audio:search-atc-audio` and `atc-audio:transcribe-audio`.
 
-These skills are built for Claude Code running on your own machine. They need local
-ffmpeg, uv, a browser extension and (for free transcription) Apple Silicon, so they
-won't work as uploaded skills in claude.ai's code-execution sandbox.
+#### Codex CLI
+
+Ask Codex's built-in installer for both skills:
+
+```text
+$skill-installer install skills/search-atc-audio and skills/transcribe-audio from wiseman/wiseman-skills
+```
+
+Or, to use a clone of this repo so your edits take effect directly, link both skill
+folders into Codex's user skills folder (use `<project>/.agents/skills` instead for a
+single project):
+
+```sh
+mkdir -p ~/.agents/skills
+ln -s "$PWD/skills/search-atc-audio" "$PWD/skills/transcribe-audio" ~/.agents/skills/
+```
+
+Run `/skills` in Codex to check they're there, then use them by asking, or with
+`$search-atc-audio` and `$transcribe-audio`.
+
+#### Where they run
+
+These skills are built for an agent running on your own machine. They need local
+ffmpeg, uv, a browser tool and (for free transcription) Apple Silicon, so they won't
+work as uploaded skills in claude.ai's code-execution sandbox.
+
+### Development
+
+Run the offline tests (no API calls or model downloads) from the repo root with
+Python 3.11 or later:
+
+```sh
+python3 -m unittest discover -s tests -v
+```
 
 ### Example prompts
 

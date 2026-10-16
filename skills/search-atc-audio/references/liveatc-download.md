@@ -12,11 +12,20 @@ Recipe that worked (Oct 2026). LiveATC keeps ~7 days of 30-minute archive files 
   a scripted `fetch()` POST from the page returns nothing useful.
 - Links expire after ~5 minutes and are "not shareable".
 
-So use the user's real browser: Chrome (claude-in-chrome tools) or
-whatever browser tool you have access to. **Only download at the user's
-direction.** The user asks for the audio and approves the specific files
+So use the user's real browser through an integration supported by the current
+agent (for example, Claude in Chrome). Codex CLI does not gain browser access just
+by installing this skill. If the agent cannot use the user's browser, ask the user
+to download the approved files and provide their local paths.
+
+**Only download at the user's direction.** The user asks for the audio and approves the specific files
 (filenames, count, approximate size: ~2–3 MB per 30-min file) before
 anything is fetched. Don't download in bulk or on speculation.
+
+The JavaScript snippets below are optional examples for browser integrations that
+support page evaluation. Follow that integration's instructions and permissions;
+if evaluation is unavailable, use the visible search results, archive form, signed
+link and browser download controls. Do not try to bypass a CAPTCHA or access block.
+If user interaction is required, pause for them to complete it.
 
 ## 1. Find the feeds for an airport
 
@@ -61,7 +70,9 @@ define a helper, submit, and follow the signed link in the same tab:
 
 ```js
 window.getArchive = async (fac, date, time) => {   // date 'YYYYMMDD', time 'HHMMZ'
-  const f = document.forms[4];                       // the archive-response.php form
+  const f = [...document.forms].find(form =>
+    new URL(form.action, location.href).pathname.endsWith('/archive-response.php'));
+  if (!f) return 'archive form not found';
   f.elements[0].value = date.slice(0,4)+'-'+date.slice(4,6)+'-'+date.slice(6);
   f.date.value = date; f.facility.value = fac; f.time.value = time;
   if (f.facility.value !== fac) return 'bad facility';
@@ -79,12 +90,11 @@ await getArchive('KLAX-Twr-South', '20261008', '1730Z')
 ```
 
 Notes:
-- `document.forms[4]` was the archive form at the time; if that changes, find the form
-  whose `action` is `archive-response.php`.
+- Inspect the current form before using this example; its fields may change.
 - Wait ~2 s after page load before calling it (Turnstile must show "Success!").
 - If the call errors with "Inspected target navigated", Cloudflare reloaded the page;
   just re-define the helper and call it again.
-- Don't return or print the signed URL — the browser tool redacts query strings anyway.
+- Don't return or print the signed URL; it is temporary and may grant access to the file.
 
 ## 3. Save the mp3
 
