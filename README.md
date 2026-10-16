@@ -42,8 +42,13 @@ In Claude Code:
 /plugin install atc-audio@wiseman-skills
 ```
 
-For claude.ai, zip each folder under `skills/` and upload the zips under
-Settings → Capabilities → Skills.
+`atc-audio` is the plugin; it installs two skills, `search-atc-audio` and
+`transcribe-audio`. Claude Code lists them with the plugin name in front, as
+`atc-audio:search-atc-audio` and `atc-audio:transcribe-audio`.
+
+These skills are built for Claude Code running on your own machine. They need local
+ffmpeg, uv, a browser extension and (for free transcription) Apple Silicon, so they
+won't work as uploaded skills in claude.ai's code-execution sandbox.
 
 ### Example prompts
 
