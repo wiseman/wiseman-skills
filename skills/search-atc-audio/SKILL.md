@@ -12,9 +12,9 @@ description: >-
   transcribing them locally for free with UTC timestamps, identifying callsigns without biasing the model, and
   cutting clips for the user to listen to.
 compatibility: >-
-  Needs the transcribe-audio skill, ffmpeg, uv, and Chrome with the Claude in Chrome
-  extension for LiveATC downloads. Free local transcription needs macOS on Apple
-  Silicon; elsewhere use transcribe-audio's OpenAI backend (paid, OPENAI_API_KEY).
+  Needs the transcribe-audio skill, ffmpeg, uv, and access to the user's browser for
+  LiveATC downloads (or user-provided archive files). Free local transcription needs
+  macOS on Apple Silicon; elsewhere use the OpenAI backend (paid, OPENAI_API_KEY).
 ---
 
 # Search ATC audio
@@ -23,9 +23,12 @@ Answer "what did this aircraft say / what is it called" from archived ATC radio.
 Transcription itself uses the **`transcribe-audio`** skill's script; this skill covers
 everything around it.
 
-Before transcribing, load the `transcribe-audio` skill and use its
-`scripts/transcribe.py`, relative to that skill's base directory. Run it with
-`uv run`.
+Before transcribing, load the `transcribe-audio` skill and resolve its
+`scripts/transcribe.py` to an absolute path using that skill's base directory.
+Use the host's skill discovery instead of assuming an installation path or that the
+two skills are adjacent. If it is missing, ask the user to install both skills from
+this repository. Run the script with `uv run`, keeping the user's project as the
+working directory. Resolve this skill's `references/` relative to this `SKILL.md`.
 
 ## Workflow
 
@@ -50,23 +53,29 @@ Before transcribing, load the `transcribe-audio` skill and use its
    - Archives are 30-min files named `...-HHMMZ.mp3`, and each slot is published
      only after it ends.
 3. **Download only at the user's direction.** Downloads go through the user's own
-   browser (Claude in Chrome or another browser tool). Before downloading anything,
-   list the filenames, the count and the size (about 2–3 MB per file), and wait for
+   browser (Claude in Chrome or another supported browser integration). If no such
+   integration is available, help the user select the archives and ask them to
+   download the approved files and provide their local paths. Do not substitute a
+   server-side HTTP client to work around browser access restrictions.
+   Before downloading anything, list the filenames, the count and the size (about 2–3 MB per file), and wait for
    the user's go-ahead. Never download in bulk or on speculation. Read
    `references/liveatc-download.md` for the exact steps. Save into the user's project
    directory (e.g. `<project>/audio/`), not the session scratchpad.
 
 4. **Transcribe with UTC times.** If you're transcribing with a local
-   model it's free, so re-run windows as often as you need. LiveATC files are squelch-gated and mostly silence, so use
+   model on Apple Silicon macOS it's free, so re-run windows as often as you need.
+   On other hosts, use `--backend openai` after following the transcription skill's
+   API setup and upload-consent guidance; do not blindly run the local-only example.
+   LiveATC files are squelch-gated and mostly silence, so use
    `--remove-silence` for whole files. It runs many times faster,
    gives fewer hallucinations and more accurate start times, and the
    timestamps still point into the original file (see the
    `transcribe-audio` skill):
    ```bash
-   T=<transcribe-audio skill base directory>/scripts/transcribe.py
-   uv run $T audio/KLAX-Twr-South-Oct-08-2026-1730Z.mp3 --backend local --timestamps --clock auto --remove-silence -o audio/twr_south_1730Z.txt
+   T="/absolute/path/to/transcribe-audio/scripts/transcribe.py"
+   uv run "$T" audio/KLAX-Twr-South-Oct-08-2026-1730Z.mp3 --backend local --timestamps --clock auto --remove-silence -o audio/twr_south_1730Z.txt
    # focused 2-minute window, still in true UTC
-   uv run $T audio/KLAX-Twr-South-Oct-08-2026-1730Z.mp3 --backend local --timestamps --clock auto --start 00:11:30 --duration 00:02:00
+   uv run "$T" audio/KLAX-Twr-South-Oct-08-2026-1730Z.mp3 --backend local --timestamps --clock auto --start 00:11:30 --duration 00:02:00
    ```
    A 30-minute file usually takes several minutes with `large-v3-turbo`, or can take seconds with
    `--remove-silence` on a quiet frequency.

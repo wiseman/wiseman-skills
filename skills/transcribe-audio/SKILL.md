@@ -15,8 +15,8 @@ description: >-
   jargon/names/callsigns, and clipping to a time window.
 compatibility: >-
   Needs ffmpeg/ffprobe and uv. The local backend (mlx-whisper) runs only on macOS on
-  Apple Silicon; on other systems use the OpenAI backend, which needs OPENAI_API_KEY,
-  or another local model.
+  Apple Silicon; on other systems use the OpenAI backend, which needs OPENAI_API_KEY
+  and network access. A shell and a readable local input file are required.
 ---
 
 # Transcribe audio
@@ -26,6 +26,24 @@ API or locally with mlx-whisper. The bundled script `scripts/transcribe.py` hand
 parts that are easy to get wrong — the upload size limit, model/format compatibility,
 vocabulary biasing, and timestamp handling — so prefer it over hand-rolling `curl` or
 ad-hoc Whisper scripts each time.
+
+## Locate the bundled script
+
+Resolve `scripts/transcribe.py` relative to the directory containing this loaded
+`SKILL.md`, not the shell's current working directory. Use the skill path supplied
+by the host (Claude Code or Codex); do not assume a `~/.claude` or `~/.codex` path.
+Keep the shell in the user's project so relative input/output paths still work.
+
+The shell examples below use `T` for the resolved **absolute** script path. Set it
+once in the shell where you will run the command, replacing the example path:
+
+```bash
+T="/absolute/path/to/transcribe-audio/scripts/transcribe.py"
+```
+
+In PowerShell, use `$T = "C:\path\to\transcribe-audio\scripts\transcribe.py"`;
+`uv run "$T" ...` works there too. If shell calls do not preserve variables, pass
+the quoted absolute script path directly on each call.
 
 ## Backends: local (free) or OpenAI (paid)
 
@@ -48,10 +66,11 @@ LiveATC tower/approach audio well, and it costs nothing to re-run windows many t
 
 - **API key** (OpenAI backend only): the script reads `OPENAI_API_KEY` from the
   environment and nothing else. If it isn't set and you need the OpenAI backend, ask the
-  user to export it (e.g. `export OPENAI_API_KEY=sk-...` in their shell, ideally from a
-  secrets manager) — or just use `--backend local`. **Never** accept a key on the command
-  line or write one into a file — it leaks into shell history and these transcripts. If
-  the user pastes a key, use it for the call but warn them it's now in the log and suggest rotating.
+  user to configure it in their environment through a secrets manager or secure
+  credential flow, then restart the agent if needed so its shell inherits it. Do not
+  ask them to paste it in chat, echo it, or put it in a command or project file.
+  If a key is exposed in chat or logs, suggest rotating it. On Apple Silicon macOS,
+  `--backend local` avoids the API key and audio upload.
 - **ffmpeg / ffprobe** must be on PATH (used for sizing, clipping, normalizing). Install
   with `brew install ffmpeg`, apt, winget, etc.
 - **uv** must be on PATH (see https://docs.astral.sh/uv/getting-started/installation/).
@@ -61,12 +80,14 @@ LiveATC tower/approach audio well, and it costs nothing to re-run windows many t
 ## Quick start
 
 ```bash
-uv run scripts/transcribe.py recording.mp3
+uv run "$T" recording.mp3
 ```
 
-That prints plain text. With `OPENAI_API_KEY` set it uses OpenAI's default
-high-quality model (`gpt-4o-transcribe`); otherwise it runs locally with
-`large-v3-turbo`.
+That prints plain text. With `OPENAI_API_KEY` set it uploads audio to OpenAI's
+paid API using `gpt-4o-transcribe`; otherwise it runs locally with
+`large-v3-turbo` on Apple Silicon macOS. On other machines, configure the OpenAI
+backend first. Confirm the user's choice of hosted transcription before sending
+private recordings; installing or invoking the skill is not blanket upload consent.
 
 ## Choosing model and output format (OpenAI backend)
 
@@ -97,11 +118,11 @@ sharply reduces garbled domain terms. This mattered more than model choice in pr
 
 ```bash
 # A technical interview
-uv run scripts/transcribe.py interview.m4a \
+uv run "$T" interview.m4a \
   --prompt "Guests: Dr. Anya Sharma, Marco. Topics: Kubernetes, etcd, gRPC, Anthropic, RAG."
 
 # ATC radio — give it callsigns, runways, and the phraseology you expect
-uv run scripts/transcribe.py tower.mp3 --timestamps \
+uv run "$T" tower.mp3 --timestamps \
   --prompt "Long Beach Tower ATC. N249CP, Skyhawk, runway 30, runway 26, cleared for takeoff, cleared to land, traffic, go around."
 ```
 
@@ -126,32 +147,32 @@ For ATC callsigns, the **`search-atc-audio`** skill has the full method.
 `HH:MM:SS` or seconds:
 
 ```bash
-uv run scripts/transcribe.py long_meeting.mp3 --start 01:12:00 --duration 00:05:00 --timestamps
+uv run "$T" long_meeting.mp3 --start 01:12:00 --duration 00:05:00 --timestamps
 ```
 
 **Faint or noisy audio** — loudness-normalize and downsample before sending:
 
 ```bash
-uv run scripts/transcribe.py noisy.wav --normalize --timestamps
+uv run "$T" noisy.wav --normalize --timestamps
 ```
 
 **A video file** — the API accepts mp4/webm directly; just pass it. (If it's large,
 the script downsamples the audio automatically; see below.)
 
 ```bash
-uv run scripts/transcribe.py talk.mp4 --srt -o talk.srt
+uv run "$T" talk.mp4 --srt -o talk.srt
 ```
 
 **Several files at once** — each gets a `# filename` header in the output:
 
 ```bash
-uv run scripts/transcribe.py freq1.mp3 freq2.mp3 freq3.mp3 --timestamps --prompt "..."
+uv run "$T" freq1.mp3 freq2.mp3 freq3.mp3 --timestamps --prompt "..."
 ```
 
 **Local, free, with UTC clock times** (the usual LiveATC case):
 
 ```bash
-uv run scripts/transcribe.py KLGB1-ES-Twr1-119.400-Oct-16-2026-0230Z.mp3 \
+uv run "$T" KLGB1-ES-Twr1-119.400-Oct-16-2026-0230Z.mp3 \
   --backend local --timestamps --clock auto --start 00:11:30 --duration 00:02:00
 ```
 
@@ -172,7 +193,7 @@ On a 32-minute KCNO tower file (96% silent) it:
 - **Costs less on the OpenAI backend**, which bills per minute of audio.
 
 ```bash
-uv run scripts/transcribe.py KCNO-Twr-Oct-13-2026-0000Z.mp3 \
+uv run "$T" KCNO-Twr-Oct-13-2026-0000Z.mp3 \
   --backend local --timestamps --clock auto --remove-silence -o cno_0000Z.txt
 ```
 
@@ -214,10 +235,10 @@ case — map segment offsets to actual clock time with `--clock`:
 
 ```bash
 # Parse the start time from a LiveATC filename like KLGB1-...-Jun-19-2026-0000Z.mp3
-uv run scripts/transcribe.py KLGB1-ES-Twr1-119.400-Jun-19-2026-0000Z.mp3 --timestamps --clock auto
+uv run "$T" KLGB1-ES-Twr1-119.400-Jun-19-2026-0000Z.mp3 --timestamps --clock auto
 
 # Or give the base explicitly
-uv run scripts/transcribe.py session.mp3 --timestamps --clock 09:00:00
+uv run "$T" session.mp3 --timestamps --clock 09:00:00
 ```
 
 Output lines then read `[16:07:13Z] ...` instead of `[+00:07:13]`, which makes it easy to
