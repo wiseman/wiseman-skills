@@ -5,7 +5,7 @@ description: >-
   speech-to-text API or a free local Whisper (mlx-whisper on Apple Silicon). Use this whenever the user wants speech turned into text:
   transcribing a recording, voice memo, interview, podcast, meeting, lecture,
   phone call, YouTube/video audio, or ATC/LiveATC radio; getting subtitles
-  (SRT/VTT) or timestamps for a clip; pulling quotes out of an audio file;
+  (SRT, or VTT converted from it) or timestamps for a clip; pulling quotes out of an audio file;
   finding when something was said; or asking "what's in this mp3/m4a/wav",
   "transcribe this", "what did they say", "make captions for this". Reach for it
   even when the user names a file (.mp3 .m4a .wav .mp4 .webm .flac .ogg) and just
@@ -162,6 +162,8 @@ the script downsamples the audio automatically; see below.)
 ```bash
 uv run "$T" talk.mp4 --srt -o talk.srt
 ```
+
+The script only writes SRT. For WebVTT, convert it: `ffmpeg -i talk.srt talk.vtt`.
 
 **Several files at once** — each gets a `# filename` header in the output:
 

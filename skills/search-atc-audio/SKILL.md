@@ -57,8 +57,8 @@ working directory. Resolve this skill's `references/` relative to this `SKILL.md
    integration is available, help the user select the archives and ask them to
    download the approved files and provide their local paths. Do not substitute a
    server-side HTTP client to work around browser access restrictions.
-   Before downloading anything, list the filenames, the count and the size (about 2–3 MB per file), and wait for
-   the user's go-ahead. Never download in bulk or on speculation. Read
+   Before downloading anything, list the filenames, the count and the size (about
+   2–3 MB per file), and wait for the user's go-ahead. Never download in bulk or on speculation. Read
    `references/liveatc-download.md` for the exact steps. Save into the user's project
    directory (e.g. `<project>/audio/`), not the session scratchpad.
 

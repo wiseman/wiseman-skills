@@ -5,13 +5,13 @@
   },
   "metadata": {
     "description": "Agent skills by John Wiseman",
-    "version": "0.1.0"
+    "version": "0.1.1"
   },
   "plugins": [
     {
       "name": "atc-audio",
       "description": "Find, download, transcribe and analyze archived air traffic control radio (LiveATC), with silence removal and UTC-correct timestamps for lining transmissions up with ADS-B tracks",
-      "version": "0.1.0",
+      "version": "0.1.2",
       "source": "./",
       "strict": false,
       "skills": [

@@ -29,11 +29,11 @@ Two skills for working with air traffic control radio:
   the Whisper model from Hugging Face (about 1.5 GB for `large-v3-turbo`).
 - **Anywhere else**, set `OPENAI_API_KEY` in your environment to use OpenAI's API
   (paid, roughly $0.006 per minute of audio).
-- **LiveATC downloads** need access to your own browser through a browser integration
-  supported by your agent (for example, [Claude in Chrome](https://claude.com/chrome)).
-  Installing these skills does not install a browser integration. Without one,
-  download the approved archive files yourself and give the agent their local paths;
-  feed selection and transcription still work.
+- **If `OPENAI_API_KEY` is set**, transcription uses OpenAI's paid API by default, even
+  on a Mac. Ask for local transcription if you'd rather keep audio on your machine.
+- **LiveATC downloads** go through your own browser, using a browser tool your agent
+  supports, such as [Claude in Chrome](https://claude.com/chrome). Without one, you can
+  download the files yourself and give the agent their paths.
 - **ADS-B data** makes `search-atc-audio` much more useful: any source of aircraft
   tracks for the time and place you're looking at.
 
@@ -48,74 +48,44 @@ In Claude Code:
 /plugin install atc-audio@wiseman-skills
 ```
 
+`atc-audio` is the plugin; it installs two skills, `search-atc-audio` and
+`transcribe-audio`. Claude Code lists them with the plugin name in front, as
+`atc-audio:search-atc-audio` and `atc-audio:transcribe-audio`.
+
 #### Codex CLI
 
-Ask the built-in installer to install **both** skills:
+Ask Codex's built-in installer for both skills:
 
 ```text
-$skill-installer Install search-atc-audio and transcribe-audio from https://github.com/wiseman/wiseman-skills, using skills/search-atc-audio and skills/transcribe-audio.
+$skill-installer install skills/search-atc-audio and skills/transcribe-audio from wiseman/wiseman-skills
 ```
 
-For a shared, editable checkout on macOS or Linux, clone this repository (or use an
-existing clone), then run the following from its root. This links both skill folders
-into Codex's user-level discovery directory without copying their contents:
+Or, to use a clone of this repo so your edits take effect directly, link both skill
+folders into Codex's user skills folder (use `<project>/.agents/skills` instead for a
+single project):
 
 ```sh
-mkdir -p "$HOME/.agents/skills"
-for skill in search-atc-audio transcribe-audio; do
-  target="$HOME/.agents/skills/$skill"
-  if [ -e "$target" ] || [ -L "$target" ]; then
-    printf 'Already exists, leaving unchanged: %s\n' "$target" >&2
-  else
-    ln -s "$PWD/skills/$skill" "$target"
-  fi
-done
+mkdir -p ~/.agents/skills
+ln -s "$PWD/skills/search-atc-audio" "$PWD/skills/transcribe-audio" ~/.agents/skills/
 ```
 
-For project-only use, put the two complete skill folders in
-`<project>/.agents/skills/` instead. On Windows, use the installer or copy the folders;
-symlinks can require additional OS permissions. Keep `scripts/` and `references/`
-with their respective skills. Do not install a second copy if the installer already
-made the skills available.
+Run `/skills` in Codex to check they're there, then use them by asking, or with
+`$search-atc-audio` and `$transcribe-audio`.
 
-Run `/skills` in Codex to check discovery, then invoke `$search-atc-audio` or
-`$transcribe-audio`. Restart Codex if a newly installed skill is missing. The Claude
-marketplace commands above are for Claude Code; Codex can load the same `SKILL.md`
-files directly.
+#### Where they run
 
-#### claude.ai
+These skills are built for an agent running on your own machine. They need local
+ffmpeg, uv, a browser tool and (for free transcription) Apple Silicon, so they won't
+work as uploaded skills in claude.ai's code-execution sandbox.
 
-Zip each folder under `skills/` and upload both zips under
-Settings → Capabilities → Skills. Transcription also needs an execution environment
-with the prerequisites above; uploading a skill does not supply those tools.
+### Development
 
-### Compatibility notes
-
-- The same skill sources serve both CLIs: their frontmatter uses the shared `name`,
-  `description`, and `compatibility` fields. No Claude-only hooks, context forks,
-  tool-name permissions, or inline shell substitutions are required.
-- Scripts and references are resolved from the loaded skill's location, not the
-  project working directory or a hard-coded Claude/Codex installation path.
-- Browser capabilities and transcription backends depend on the execution machine,
-  not which agent reads the skill. `mlx-whisper` needs Apple Silicon macOS; the
-  OpenAI backend works on other platforms with an API key and network access.
-- `--backend auto` uses the paid OpenAI API whenever `OPENAI_API_KEY` is set. Use
-  `--backend local` explicitly on a supported Mac to keep transcription local.
-
-See the official [Claude Code skills documentation](https://code.claude.com/docs/en/skills)
-and [Codex skills documentation](https://learn.chatgpt.com/docs/build-skills) for
-current discovery and invocation behavior.
-
-### Development checks
-
-Run the offline regression tests with Python 3.11+ from the repository root:
+Run the offline tests (no API calls or model downloads) from the repo root with
+Python 3.11 or later:
 
 ```sh
 python3 -m unittest discover -s tests -v
 ```
-
-These checks do not call the transcription API or download Whisper models. Live
-browser downloads and model transcription still need testing in a configured host.
 
 ### Example prompts
 
