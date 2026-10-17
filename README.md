@@ -4,6 +4,13 @@ Agent skills for [Claude Code](https://claude.com/claude-code),
 [Codex CLI](https://developers.openai.com/codex/cli), and other tools that support
 [Agent Skills](https://agentskills.io).
 
+There are two plugins:
+
+- **[atc-audio](#atc-audio)** — find, download and transcribe archived air traffic
+  control radio (LiveATC), and match what was said to ADS-B tracks.
+- **[satellite-imagery](#satellite-imagery)** — find aircraft and ships in free
+  Copernicus Sentinel-2 (optical) and Sentinel-1 (radar) satellite imagery.
+
 ## atc-audio
 
 Two skills for working with air traffic control radio:
