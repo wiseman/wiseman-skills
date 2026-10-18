@@ -184,8 +184,10 @@ def block_mean(a, b):
 
 
 def read_window(g, product, pols, lat, lon, half_m, block_m=0):
-    """Power (float32) of `pols` in frequency A of a geocoded product (GCOV or GSLC) in a square of
-    +-half_m around a point, optionally averaged into blocks of about block_m. Returns
+    """Power (float32) of `pols` in frequency A of a geocoded product (GCOV or GSLC) covering a square
+    of +-half_m around a point, optionally averaged into blocks of about block_m. The returned
+    product-grid rectangle includes padding outside that local square; callers must mask or
+    resample it to enforce the requested boundary. Returns
     (dict pol -> array, x, y, epsg, posting_m). Works in any product CRS (UTM or polar)."""
     gname = sibling(g, product)
     key = cache_path(f'v2|{gname}|{"/".join(pols)}|{lat:.5f}|{lon:.5f}|{half_m:.0f}|{block_m:.0f}')
@@ -231,6 +233,12 @@ def to_local(planes, x, y, epsg, lat, lon, half_m, px_m):
     X, Y = Transformer.from_crs(local_crs(lat, lon), epsg, always_xy=True).transform(E, N)
     rc = [(Y - y[0]) / (y[1] - y[0]), (X - x[0]) / (x[1] - x[0])]
     return [ndimage.map_coordinates(p, rc, order=1, cval=np.nan) for p in planes]
+
+
+def window_mask(x, y, epsg, lat, lon, half_m):
+    """Product-grid pixel centres inside the requested square in local east/north metres."""
+    E, N = Transformer.from_crs(epsg, local_crs(lat, lon), always_xy=True).transform(*np.meshgrid(x, y))
+    return (np.abs(E) <= half_m) & (np.abs(N) <= half_m)
 
 
 def db(a):
@@ -354,7 +362,7 @@ def find_blobs(V, valid, block_m, min_db, nmax):
         found.append({'peak_rc': pk, 'centre_rc': (cy, cx), 'peak_db': float(sm[pk] - bg), 'area_px': int(reg.sum()),
                       'truncated': bool((reg & edge).any()), 'region': reg})
         work[ndimage.binary_dilation(reg, iterations=3)] = -np.inf
-    return sm - bg, found
+    return np.where(valid, sm - bg, np.nan), found
 
 
 def cmd_blobs(a):
@@ -367,7 +375,8 @@ def cmd_blobs(a):
         print(f'note: no cross-pol channel in this mode; searching {layer} instead')
     d, xs, ys, epsg, blk = read_window(g, 'GCOV', [layer], a.lat, a.lon, a.size_km * 500, block_m=BLOCK_M)
     V = d[layer]
-    valid = np.isfinite(V)
+    valid = np.isfinite(V) & (V > 0) & window_mask(xs, ys, epsg, a.lat, a.lon, a.size_km * 500)
+    V = np.where(valid, V, np.nan)
     if valid.sum() < 100:
         die('Almost no valid data in this window (the point may be at the frame edge).')
     sm, found = find_blobs(V, valid, blk, a.min_db, a.max)
@@ -391,7 +400,8 @@ def cmd_blobs(a):
         print(f"blob {i}: brightest point {plat:.4f}, {plon:.4f}  centre {clat:.4f}, {clon:.4f}  "
               f"+{f['peak_db']:.1f} dB  {area:.0f} km2{'  (runs off the data or window: use the brightest point, not the centre)' if f['truncated'] else ''}")
     js = os.path.splitext(a.out)[0] + '.json'
-    json.dump({'granule': g, 'lat': a.lat, 'lon': a.lon, 'size_km': a.size_km, 'channel': layer, 'blobs': res}, open(js, 'w'), indent=1)
+    with open(js, 'w', encoding='utf-8') as out:
+        json.dump({'granule': g, 'lat': a.lat, 'lon': a.lon, 'size_km': a.size_km, 'channel': layer, 'blobs': res}, out, indent=1)
     fig, ax = plt.subplots(1, 2, figsize=(14, 6.6))
     ext = [(xs[0] - X0) / 1e3, (xs[-1] - X0) / 1e3, (ys[-1] - Y0) / 1e3, (ys[0] - Y0) / 1e3]
     raw = db(V) - np.nanpercentile(db(V[valid]), 20)
@@ -491,16 +501,19 @@ def cmd_rfimeta(a):
             t_first = min(p['t'][0] for p in parts)
             framewide = sum(p['hc'].sum((0, 1)) for p in parts) / sum(p['hc'].shape[0] * p['hc'].shape[1] for p in parts)
             tones = ndimage.binary_dilation(framewide > a.tone_frac, iterations=4)  # plus neighbouring bins the tone leaks into
-            w = (~tones) / (~tones).sum()
-            for p in parts:
-                p['share'] = p['hc'] @ w   # share of flagged cells outside the ever-present tones
-            all_share = np.concatenate([p['share'][:, 3:-3].ravel() for p in parts])
-            med = float(np.median(all_share))
+            bins_used = int((~tones).sum())
+            if bins_used:
+                w = (~tones) / bins_used
+                for p in parts:
+                    p['share'] = p['hc'] @ w   # share of flagged cells outside the ever-present tones
+                all_share = np.concatenate([p['share'][:, 3:-3].ravel() for p in parts])
+                med = float(np.median(all_share))
             sm_med = float(np.nanmedian(np.concatenate([p['sm'].ravel() for p in parts]))) if has_sm else 0.0
             flag, level = [], []
             for p in parts:
-                p['share'][:, :3] = 0; p['share'][:, -3:] = 0  # the swath's near and far edge blocks are always hot
-                flag += [(p['share'][ti, ri], p, ti, ri) for ti, ri in hotspots(p['share'], max(5 * med, 0.01))]
+                if bins_used:
+                    p['share'][:, :3] = 0; p['share'][:, -3:] = 0  # the swath's near and far edge blocks are always hot
+                    flag += [(p['share'][ti, ri], p, ti, ri) for ti, ri in hotspots(p['share'], max(5 * med, 0.01))]
                 if has_sm:
                     p['lev'] = p['sm'] - sm_med
                     level += [(p['lev'][ti, ri], p, ti, ri) for ti, ri in hotspots(p['lev'], 10.0)]
@@ -522,26 +535,34 @@ def cmd_rfimeta(a):
                         break
                 return hs
             info = {'tones_everywhere_MHz': sorted({round(float(v), 1) for v in fq[framewide > a.tone_frac]}),
+                    'flag_status': 'ok' if bins_used else 'no_frequency_bins',
+                    'frequency_bins_used': bins_used, 'frequency_bins_total': int(fq.size), 'tone_frac': a.tone_frac,
                     'flag_hotspots': top5(flag, flag_fields),
                     'level_hotspots': top5(level, lambda v, p, ti, ri: {'level_db_above_median': round(float(v), 1)})}
             top_spec = info['flag_hotspots'][0]['_spec'] if info['flag_hotspots'] else None
             for h in info['flag_hotspots']:
                 del h['_spec']
-            vmax_s = np.percentile(100 * all_share, 99.5)
+            vmax_s = max(1, np.percentile(100 * all_share, 99.5)) if bins_used else None
             lev_max = max(10, np.nanpercentile(np.concatenate([p['lev'].ravel() for p in parts]), 99.5)) if has_sm else None
             for p in parts:
                 T, R = p['t'] - t_first, p['r'] / 1e3
-                m0 = ax[fi, 0].pcolormesh(T, R, 100 * p['share'].T, cmap='magma', vmin=0, vmax=vmax_s, shading='nearest')
+                if bins_used:
+                    m0 = ax[fi, 0].pcolormesh(T, R, 100 * p['share'].T, cmap='magma', vmin=0, vmax=vmax_s, shading='nearest')
                 if has_sm:
                     m1 =ax[fi, 1].pcolormesh(T, R, p['lev'].T, cmap='viridis', vmin=-3, vmax=lev_max, shading='nearest')
-            plt.colorbar(m0, ax=ax[fi, 0], label='% of cells flagged')
+            if bins_used:
+                plt.colorbar(m0, ax=ax[fi, 0], label='% of cells flagged')
+            else:
+                ax[fi, 0].text(0.5, 0.5, 'Flag analysis unavailable:\nno frequency bins remain after tone exclusion.\nThis is not evidence of no interference.',
+                               ha='center', va='center', transform=ax[fi, 0].transAxes, fontsize=9)
+                ax[fi, 0].set_axis_off()
             ax[fi, 0].set_title(f'{fr}: share flagged (tones flagged across the whole pass excluded)', loc='left', fontsize=9)
             if has_sm:
                 plt.colorbar(m1, ax=ax[fi, 1], label='dB above pass median')
                 ax[fi, 1].set_title(f"{fr}: detector's typical level (signalMean)", loc='left', fontsize=9)
             for hs, c in ((info['flag_hotspots'], 'cyan'), (info['level_hotspots'], 'white')):
                 for h in hs:
-                    for axx in ax[fi, :2]:
+                    for axx in (ax[fi, :2] if bins_used else ax[fi, 1:2]):
                         axx.plot(h['time_s'], h['slant_km'], 'o', mfc='none', mec=c, ms=9)
             out['freqs'][fr] = info
             ax[fi, 2].plot(fq, 100 * framewide, color='#888', lw=1, label='whole pass')
@@ -558,10 +579,14 @@ def cmd_rfimeta(a):
     fig.tight_layout(rect=(0, 0.015, 1, 0.96))
     fig.savefig(a.out, dpi=90, facecolor='white')
     js = os.path.splitext(a.out)[0] + '.json'
-    json.dump(out, open(js, 'w'), indent=1)
+    with open(js, 'w', encoding='utf-8') as stream:
+        json.dump(out, stream, indent=1)
     print(f"{g} ({rel}{'; RFI mitigation: ' + str(mitig) if mitig else ''})")
     for fr, info in out['freqs'].items():
         print(f'frequency {fr} {pol}: tones flagged across the whole pass (MHz): {info["tones_everywhere_MHz"] or "none"}')
+        if info['flag_status'] == 'no_frequency_bins':
+            print('  Flag analysis unavailable: no frequency bins remain after tone exclusion. '
+                  'This is not evidence of no interference; inspect the full spectrum and signalMean if available.')
         for h in info['flag_hotspots']:
             print(f"  flag hotspot  t={h['time_s']:5.1f}s R={h['slant_km']:6.1f}km -> {h['lat']:.4f}, {h['lon']:.4f}  "
                   f"{100 * h['flagged_share']:.1f}% flagged, mostly {h['main_freqs_MHz']} MHz")
@@ -592,7 +617,7 @@ def main():
     s.set_defaults(fn=cmd_crop)
     s = sub.add_parser('blobs', help='radio-interference blobs near a point and their centres')
     s.add_argument('lat', type=float); s.add_argument('lon', type=float); s.add_argument('granule')
-    s.add_argument('--size-km', type=float, default=120.0)
+    s.add_argument('--size-km', type=float, default=120.0, help='side length of the search square in local east/north kilometres (default 120)')
     s.add_argument('--max', type=int, default=3)
     s.add_argument('--min-db', type=float, default=6.0)
     s.add_argument('--pol', choices=['HV', 'HH'], default='HV', help='HV = cross-pol (VH in VV/VH modes), HH = like-pol')

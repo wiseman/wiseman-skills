@@ -1,18 +1,14 @@
 ---
 name: sentinel-aircraft-ships
 description: >-
-  Find aircraft, ships and radio transmitters in Sentinel-2 (optical), Sentinel-1 (C-band
-  radar) and NISAR (L-band radar) satellite imagery. Use when someone asks whether an
-  aircraft (ADS-B hex, registration or callsign) shows up in a Sentinel-2 pass or which
-  aircraft made a colour-fringed streak; when a satellite imaged a place; to find a ship
-  (for example one a helicopter used) or check whether something in a SAR image (VV/VH,
-  HH/HV) is real or an artefact (ghosts, sidelobes); to look for parked aircraft on an
-  airfield in radar; or to detect or locate radio interference: GPS/GNSS jammers,
-  air-surveillance or air-defence radars, glows, blobs or streaks in Sentinel-1 or NISAR
-  images, and NISAR's RFI filter. Use it even for a Copernicus Browser screenshot or a
-  "satellite image" that doesn't name the satellite. Covers scene lookup, imaging times,
-  aircraft fringes, ship detection and motion, NISAR data access, interference
-  localization and how to report results.
+  Find aircraft, ships and radio interference in Sentinel-2 optical, Sentinel-1 C-band
+  radar and NISAR L-band radar imagery. Use for satellite pass lookup and imaging times;
+  matching aircraft or colour-fringed streaks to ADS-B tracks (hex, registration or
+  callsign); ship detection and motion; distinguishing SAR targets from ghosts and
+  sidelobes; inspecting parked aircraft in HH/HV; or investigating interference blobs,
+  streaks, GPS/GNSS jammers, radar emitters and NISAR's RFI filter record. Accepts named
+  passes and satellite-image screenshots, including Copernicus Browser. Covers data
+  access, localization limits and evidence needed to interpret detections.
 compatibility: >-
   Needs uv and network access. Imagery comes from public, no-account sources (Earth
   Search, Microsoft Planetary Computer, Copernicus Data Space catalogue, Copernicus DEM
@@ -320,6 +316,9 @@ work: they hold the modes, releases, accuracy and traps. Key points:
 - Interference: the brightest point of a blob was within ~8 km of known radars in 13 of 14 tests.
   Hills inside a blob are most likely imprinted by the terrain correction; don't read them as
   evidence of reflected interference.
+- For `rfimeta`, check each frequency's `flag_status` in the JSON. `no_frequency_bins` means the
+  flag analysis was unavailable after tone exclusion, not that no emitter was present. The full
+  spectrum and available level hotspots still help; interpretation is in `references/rfi.md`.
 - Streaming windows takes seconds to a couple of minutes; never download whole files (1.5-26 GB).
 - Credit: "Contains NASA-ISRO NISAR data, NASA/JPL-Caltech/ISRO, distributed by ASF DAAC."
 

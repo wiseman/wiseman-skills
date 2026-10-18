@@ -52,14 +52,20 @@ images, "glows", "blobs" or "streaks" in SAR, or the NISAR RFI filter.
   rises (+25-30 dB at Kaliningrad) while flags drop. GCOV `rfiLikelihood` is unreliable (values far
   outside its documented 0-1 range) and GCOV `rfiMitigationApplied=False` refers only to the GCOV step.
 - Tones at 1233.1, 1239.0, 1293.5 and 1296.0 MHz are flagged on many passes everywhere we looked;
-  `rfimeta` treats ever-present tones as background.
+  `rfimeta` excludes bins whose pass-average flagged share exceeds `--tone-frac` (default 0.05),
+  plus four neighbouring bins on each side. This is a background heuristic: exclusion alone
+  does not prove a tone was present throughout the pass.
 
 ## NISAR commands
 
 Synopsis in SKILL.md; `--help` lists every option.
 - `blobs` searches GCOV cross-pol (HV, or VH in VV/VH modes) in a window around a point for up to
   `--max` blobs more than `--min-db` above background (2 km smoothing), and reports each blob's
-  brightest point and brightness-weighted centre. Use the brightest point when the output says the
+  brightest point and brightness-weighted centre. `--size-km` is the side length of a square in
+  local east/north coordinates: 120 means 60 km either side of the search point. Pixels outside
+  it are excluded from detection and background estimation, including on rotated polar grids.
+  The PNG retains the product's map orientation, so the masked search boundary may look rotated.
+  Use the brightest point when the output says the
   blob runs off the data or window (the centre is then unreliable); use the centre when the whole
   blob fits. Writes PNG + JSON. Tested accuracy: the brightest point was within 1.4-8.2 km of 13 of
   14 known radars (one pass each; the 14th was 20 km off), so quote "within about 8 km in most
@@ -69,6 +75,13 @@ Synopsis in SKILL.md; `--help` lists every option.
   (pass `--height` for an emitter on high ground). Writes PNG + JSON. The positions are rough: the
   strongest hotspot was 11-24 km from 3 of 4 known radars and 97 km from the fourth, and weaker
   hotspots are often spurious. Treat them as "an emitter was active in this region at this frequency".
+  Check each frequency's JSON `flag_status` before interpreting `flag_hotspots`: `ok` means the
+  analysis ran; `no_frequency_bins` means tone exclusion left no bins to analyze. The latter
+  produces an explicit notice in the PNG and terminal, while the full spectrum and any available
+  `signalMean` analysis remain usable. `frequency_bins_used`, `frequency_bins_total`, and
+  `tone_frac` record the exclusion settings. An unavailable analysis is not a negative detection.
+  Raising `--tone-frac` retains more bins, but changes the background assumption; disclose the
+  setting when comparing runs rather than adjusting it solely to obtain a hotspot.
 - Find candidate passes with `scenes`; check public browse images for blobs before streaming data.
 
 ## Workflows

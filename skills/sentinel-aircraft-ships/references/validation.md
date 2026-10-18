@@ -96,6 +96,13 @@ running `scenes` and `ships` got it right in about two minutes.
 
 Scripts and data for these checks live outside the skill (evals/nisar in the repo working tree).
 
+Offline code regressions live in `tests/test_nisartool.py` in the repository; run
+`uv run tests/test_nisartool.py`. Synthetic grids check that blob searches exclude sources outside
+the requested square in UTM and polar projections and flag blobs cut by its boundary. Synthetic
+RFI records check unavailable analysis when all bins are excluded, preservation of level analysis
+and other frequency bands, and ordinary flag detection. These verify software behavior, not
+emitter-localization accuracy or detection rates on real passes.
+
 ### Interference blobs vs known emitters
 
 - 42 FAA ARSR-4 sites (Wikipedia Joint Surveillance System list). In BETA (unfiltered) browse
