@@ -58,6 +58,7 @@ SEARCH_HALF = 12.0      # s searched either side of the model time
 ZCAP, DETECT_Z, TOL_PX = 10.0, 4.0, 5
 CROP_MAX_PX = 2000      # crops wider than 20 km are read downsampled
 SHIPS_MAX_M = 40000     # largest box `ships` will scan
+GRID_MAX = 20           # most `crop --grid` cells per side
 SCL_NAMES = {0: 'no data', 1: 'saturated', 2: 'dark/shadow', 3: 'cloud shadow', 4: 'vegetation', 5: 'bare soil',
              6: 'water', 7: 'unclassified', 8: 'cloud (medium)', 9: 'cloud (high)', 10: 'thin cirrus', 11: 'snow'}
 
@@ -506,6 +507,13 @@ def save(res, out, name, scene):
 
 
 # ---------------------------------------------------------------- crops (for looking)
+def grid_cells(v):
+    n = int(v)
+    if not 0 <= n <= GRID_MAX:
+        raise argparse.ArgumentTypeError(f'is the number of cells per side (for example 8), not metres; {n} is out of range (0 to {GRID_MAX})')
+    return n
+
+
 def crop(lat, lon, size_m, items, grid, nir, out):
     import matplotlib
     matplotlib.use('Agg'); import matplotlib.pyplot as plt
@@ -667,7 +675,7 @@ def main():
     a = sp.add_parser('when'); a.add_argument('item'); a.add_argument('lat', type=float); a.add_argument('lon', type=float)
     a = sp.add_parser('find'); a.add_argument('item'); g = a.add_mutually_exclusive_group(required=True); g.add_argument('--hex'); g.add_argument('--track'); a.add_argument('--out', default='s2out')
     a = sp.add_parser('identify'); a.add_argument('item'); a.add_argument('lat', type=float); a.add_argument('lon', type=float); a.add_argument('--radius-km', type=float, default=15); a.add_argument('--out', default='s2out')
-    a = sp.add_parser('crop'); a.add_argument('lat', type=float); a.add_argument('lon', type=float); a.add_argument('size_m', type=float); a.add_argument('items', nargs='+'); a.add_argument('--grid', type=int, default=0); a.add_argument('--nir', action='store_true'); a.add_argument('--out', default='crop.png')
+    a = sp.add_parser('crop'); a.add_argument('lat', type=float); a.add_argument('lon', type=float); a.add_argument('size_m', type=float); a.add_argument('items', nargs='+'); a.add_argument('--grid', type=grid_cells, default=0, help=f'draw an N x N grid of labelled cells (a count, not metres; max {GRID_MAX})'); a.add_argument('--nir', action='store_true'); a.add_argument('--out', default='crop.png')
     a = sp.add_parser('ships'); a.add_argument('item'); a.add_argument('lat', type=float); a.add_argument('lon', type=float); a.add_argument('size_m', type=float); a.add_argument('--compare'); a.add_argument('--top', type=int, default=24); a.add_argument('--out', default='ships.png')
     a = sp.add_parser('ship-motion'); a.add_argument('item1'); a.add_argument('lat1', type=float); a.add_argument('lon1', type=float); a.add_argument('item2'); a.add_argument('lat2', type=float); a.add_argument('lon2', type=float)
     o = p.parse_args()

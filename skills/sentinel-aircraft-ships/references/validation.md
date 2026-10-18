@@ -91,3 +91,50 @@ radar screenshot. Checked with the tools, they are not ghosts:
 So they were probably smaller vessels keeping station behind the two ships. Answering from the
 screenshot alone got the offsets wrong (2.8-4.5 km) and wrongly assumed the same orbit a day later;
 running `scenes` and `ships` got it right in about two minutes.
+
+## NISAR (18 Oct 2026)
+
+Scripts and data for these checks live outside the skill (evals/nisar in the repo working tree).
+
+### Interference blobs vs known emitters
+
+- 42 FAA ARSR-4 sites (Wikipedia Joint Surveillance System list). In BETA (unfiltered) browse
+  images, 11 of 40 covered sites showed a clear blob, 4 a faint one; none in recent PROVISIONAL.
+- Search test at 14 sites, one BETA pass each (9-20 Jan 2026): window up to 120 km, offset at random
+  up to 30 km east-west and north-south from the radar; brightest point of the 2 km-smoothed HV image
+  found without the radar position. Brightest point within 1.4-8.2 km at 13 sites (median 6.1 km;
+  6.2 km including the 14th). Key West: 20 km from the listed radar, 2.7 km from the Cudjoe Key
+  tethered aerostat radar site (band unconfirmed). Brightness-weighted centre: 0.2-2.4 km at the 3
+  sites where the bright area fitted inside the data; 1.2-19.4 km where it ran off or merged with
+  bright coast. Small, selected sample; one pass per site.
+- Pankovo test site (Novaya Zemlya), PROVISIONAL, 15 Oct 2026: blob centre 1-4 km from the village
+  map point on ascending and descending passes (transmitter position unknown).
+- `rfimeta` ground positions vs known emitters (PROVISIONAL), mapped with the Doppler-centroid squint
+  (~960 Hz; it reproduces Ajo's ~2 s raw-time offset exactly): strongest hotspot 24 km (Ajo), 97 km
+  (Melbourne), 17 km (Riverhead), 11 km (Cudjoe Key). Mapping the centroid of the strongest
+  smoothed patch per chunk instead gave 18, 19, 1.7 and 0.9 km in the best chunk, but other chunks
+  gave 100+ km false patches, and choosing the right chunk needs the answer. The flag record is a
+  rough indicator, not a locator.
+
+### RFI filter (tone-rank) impact
+
+- Same acquisitions in BETA and PROVISIONAL: no visible radar blob after filtering at Ajo, San
+  Clemente Island, Melbourne, Key West, Riverhead; Mount Laguna and Morales had no blob either way.
+  Ajo's filter record still shows the radar as a patch about 7 s long near 1241.5 MHz.
+- Kaliningrad (track 028 A, BETA 12 Nov 2025 vs PROVISIONAL 14 Oct 2026, during GPS degradation in
+  ADS-B on both dates): a blob ~150 km across survives filtering; `signalMean` rises 25-30 dB over
+  it while flags drop. All 6 recent PROVISIONAL Vladivostok passes checked show large blobs.
+
+### Parked aircraft
+
+- Davis-Monthan storage yard, 40 MHz GSLC (BETA), 3 and 7 Nov 2025: rows of large aircraft appear as
+  rows of distinct returns in HH and HV on both pass directions, matching Sentinel-2 (4 Nov). No
+  per-aircraft truth (Sentinel-2 at 10 m could not label grey aircraft on bright desert reliably).
+  Bright spots >12 dB over a 200 m median, 3 km box: HH 1,703, HV 1,128 (ascending); 94% of HV spots
+  are >=6 dB in HH.
+- Helsinki-Vantaa, 20 MHz GSLC (BETA), 12 Jan 2026 02:35Z, ADS-B: 13 aircraft with before/after
+  positions within 15 m, 10 at the piers, none separable from the pier return. A remote-stand 737:
+  15-19 dB above its 300 m surroundings in HH depending on smoothing, but not unique nearby.
+- Memphis FedEx hub: only 7 aircraft with ADS-B ground positions bracketing the pass: no test.
+- Rogachevo (PROVISIONAL, Oct 2026): compact returns persist across two descending passes 12 days
+  apart; identity unknown (paired optical image cloudy).

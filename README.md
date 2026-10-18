@@ -8,8 +8,9 @@ There are two plugins:
 
 - **[atc-audio](#atc-audio)** — find, download and transcribe archived air traffic
   control radio (LiveATC), and match what was said to ADS-B tracks.
-- **[satellite-imagery](#satellite-imagery)** — find aircraft and ships in free
-  Copernicus Sentinel-2 (optical) and Sentinel-1 (radar) satellite imagery.
+- **[satellite-imagery](#satellite-imagery)** — find aircraft, ships and radio
+  transmitters in free Sentinel-2 (optical), Sentinel-1 (radar) and NISAR (L-band radar)
+  satellite imagery.
 
 ## atc-audio
 
@@ -110,8 +111,8 @@ use it in line with the terms of use on [liveatc.net](https://www.liveatc.net).
 
 ## satellite-imagery
 
-One skill, **`sentinel-aircraft-ships`**, for finding aircraft and ships in free
-Copernicus Sentinel satellite imagery anywhere in the world:
+One skill, **`sentinel-aircraft-ships`**, for finding aircraft, ships and radio
+transmitters in free satellite imagery anywhere in the world:
 
 - **Sentinel-2 (optical)** — find the passes over a place and the exact moment each
   pixel was imaged (not the misleading strip time), check whether an ADS-B-tracked
@@ -126,13 +127,21 @@ Copernicus Sentinel satellite imagery anywhere in the world:
   includes a recipe for checking whether something in a radar image is a real target
   or an artefact. In an AIS benchmark it found every ship of 100 m or more, with about
   1.5 unexplained detections per 1000 km².
+- **NISAR (L-band radar)** — the NASA-ISRO radar launched in 2025. Find passes, look at
+  airfields and sites north-up in HH and HV at 5-10 m (rows of parked aircraft show; aircraft
+  at gates don't), and find radio-interference blobs and where they centre. In tests the
+  brightest point of a blob was within about 8 km of 13 of 14 FAA long-range radars. It also
+  reads the record NISAR's interference filter keeps, which still shows radars the filter
+  removed from the image.
+- **Radio interference** — how to detect and locate jammers and radars with Sentinel-1
+  (streaks, C-band only: it cannot see GPS jammers) and NISAR (blobs; GPS L2 and L-band radars).
 
 ### Prerequisites
 
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) and network access. The
-  two scripts declare their Python dependencies inline, and `uv run` installs them
+  three scripts declare their Python dependencies inline, and `uv run` installs them
   automatically.
-- **Imagery** needs no account: it comes from the Earth Search STAC (Element84) and AWS
+- **Sentinel imagery** needs no account: it comes from the Earth Search STAC (Element84) and AWS
   open data, Microsoft Planetary Computer, the Copernicus Data Space catalogue and the
   Copernicus DEM on AWS.
 - **ADS-B** for checking aircraft can come from any source: pass a CSV of
@@ -143,6 +152,10 @@ Copernicus Sentinel satellite imagery anywhere in the world:
 - **Mapped structures** (OpenStreetMap bridges, turbines, platforms) in the radar ship
   detector also come from Hexbird. Without a token the detector says so and relies on
   comparing earlier passes to flag fixed objects.
+- **NISAR** search needs no account, but reading the data needs a free
+  [NASA Earthdata Login](https://urs.earthdata.nasa.gov): put
+  `machine urs.earthdata.nasa.gov login USER password PASS` in `~/.netrc`, or set
+  `EARTHDATA_USERNAME` and `EARTHDATA_PASSWORD`. The tool streams only the window it needs.
 
 ### Install
 
@@ -166,9 +179,13 @@ Claude Code lists the skill as `satellite-imagery:sentinel-aircraft-ships`.
 - "Are these two faint dots behind the ships in this Sentinel-1 image ghosts or other
   vessels?"
 - "When did Sentinel-1 last image 57.45, 11.45, and are there ships there?"
+- "Is there a GPS jammer showing up in NISAR near Kaliningrad this month, and where is it?"
+- "What's the bright glow in this NISAR image near Vladivostok? Why can I see hills inside it?"
+- "Can NISAR show the aircraft parked at Davis-Monthan? Compare HH and HV."
 
 Images made from the data should carry the credit "Contains modified Copernicus
-Sentinel data [year]".
+Sentinel data [year]" or "Contains NASA-ISRO NISAR data, NASA/JPL-Caltech/ISRO, distributed by
+ASF DAAC".
 
 ## License
 

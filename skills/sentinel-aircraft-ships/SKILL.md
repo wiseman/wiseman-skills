@@ -1,31 +1,37 @@
 ---
 name: sentinel-aircraft-ships
 description: >-
-  Find aircraft and ships in Sentinel-2 (optical) and Sentinel-1 (radar) satellite
-  imagery, anywhere in the world. Use when someone asks whether an aircraft (by ADS-B
-  hex, registration or callsign) shows up in a Sentinel-2 pass, which aircraft made a
-  colour-fringed (red/green/blue) streak in a Sentinel-2 image, when a satellite pass
-  imaged a place, whether a satellite image matches an ADS-B track, to look for a ship
-  (for example one a helicopter was operating from), or about a Sentinel-1 / SAR / radar
-  image (VV, VH), including whether something in one is real or an artefact (ghosts /
-  azimuth ambiguities, multipath, sidelobes, "is that another ship?"). Use it even for
-  a Copernicus Browser screenshot or a "satellite image" that doesn't name Sentinel. Covers scene lookup, the per-pixel imaging time, the band-by-band colour
-  fringe of moving aircraft, parallax, false matches, radar ship detection by day or
-  night and through cloud, fixed objects, ship sightings and speed, and how to report
-  the result.
+  Find aircraft, ships and radio transmitters in Sentinel-2 (optical), Sentinel-1 (C-band
+  radar) and NISAR (L-band radar) satellite imagery. Use when someone asks whether an
+  aircraft (ADS-B hex, registration or callsign) shows up in a Sentinel-2 pass or which
+  aircraft made a colour-fringed streak; when a satellite imaged a place; to find a ship
+  (for example one a helicopter used) or check whether something in a SAR image (VV/VH,
+  HH/HV) is real or an artefact (ghosts, sidelobes); to look for parked aircraft on an
+  airfield in radar; or to detect or locate radio interference: GPS/GNSS jammers,
+  air-surveillance or air-defence radars, glows, blobs or streaks in Sentinel-1 or NISAR
+  images, and NISAR's RFI filter. Use it even for a Copernicus Browser screenshot or a
+  "satellite image" that doesn't name the satellite. Covers scene lookup, imaging times,
+  aircraft fringes, ship detection and motion, NISAR data access, interference
+  localization and how to report results.
 compatibility: >-
   Needs uv and network access. Imagery comes from public, no-account sources (Earth
   Search, Microsoft Planetary Computer, Copernicus Data Space catalogue, Copernicus DEM
   on AWS). ADS-B lookups by hex and `identify`, and OSM structure flags in radar ship
   detection, use the Hexbird HTTP API ($HEXBIRD_TOKEN); `find --track CSV` works with
-  ADS-B from any source.
+  ADS-B from any source. NISAR search needs no account; reading NISAR data needs a free
+  NASA Earthdata Login (~/.netrc or $EARTHDATA_USERNAME/$EARTHDATA_PASSWORD).
 ---
 
-# Aircraft and ships in Sentinel-2 and Sentinel-1 imagery
+# Aircraft, ships and radio interference in Sentinel-2, Sentinel-1 and NISAR imagery
 
-Sentinel-2 (optical, most of this guide) is the one for aircraft, and for ships in clear daylight.
-Sentinel-1 (radar, "Sentinel-1" near the end) sees ships at dawn and dusk, at night and through
-cloud, but not aircraft.
+Which satellite for what:
+- Sentinel-2 (optical, most of this guide): aircraft in flight, and ships in clear daylight.
+- Sentinel-1 (C-band radar, "Sentinel-1" near the end): ships at dawn and dusk, at night and through
+  cloud, but not aircraft in flight; C-band radar emitters as streaks.
+- NISAR (L-band radar, "NISAR" near the end, details in `references/nisar.md`): parked aircraft and
+  sites in HH/HV at 5-10 m; radio interference in the 1.2 GHz band (GPS L2, L-band radars) as blobs
+  centred near the transmitter.
+- Radio interference with either radar: `references/rfi.md`.
 
 Sentinel-2 (S2A, S2B, S2C) images the Earth at 10 m per pixel in a 290 km swath, on daytime
 descending passes around 10:00-11:30 local solar time, revisiting a given place every 2-5 days.
@@ -35,13 +41,14 @@ you can predict exactly where an aircraft should appear and check it to within a
 
 ## Tools and data sources
 
-Two scripts in `scripts/`, relative to this skill's base directory. Run them with `uv run`, which
-installs their dependencies (numpy, scipy, pyproj, rasterio, requests, matplotlib) from the inline
-script header:
+Three scripts in `scripts/`, relative to this skill's base directory. Run them with `uv run`, which
+installs their dependencies (numpy, scipy, pyproj, rasterio, requests, matplotlib; h5py and
+earthaccess for NISAR) from the inline script header:
 
 ```
 S2=<skill base directory>/scripts/s2tool.py
 S1=<skill base directory>/scripts/s1tool.py
+NI=<skill base directory>/scripts/nisartool.py
 uv run $S2 scenes 50.719 -0.209 2026-10-13 2026-10-16
 ```
 
@@ -50,7 +57,8 @@ Where the data comes from:
   (Element84, collection `sentinel-2-c1-l2a`) and AWS open data; Sentinel-1 from Microsoft
   Planetary Computer (RTC, or GRD that the tool geocodes and calibrates itself); passes not yet
   processed are listed from the Copernicus Data Space catalogue; terrain and the land mask from
-  the Copernicus GLO-30 DEM on AWS; the geoid from PROJ.
+  the Copernicus GLO-30 DEM on AWS; the geoid from PROJ. NISAR from NASA's ASF archive: search is
+  public, reading data needs a free Earthdata Login (see `references/nisar.md`).
 - **ADS-B** for `s2tool.py find` can come from any source as a CSV: `--track track.csv` with
   columns `time,lat,lon,alt_geom_ft,alt_baro_ft` (time as ISO 8601 or epoch seconds; either
   altitude may be blank). This needs no account. `find --hex HEX` and `identify` fetch ADS-B from
@@ -63,7 +71,8 @@ Where the data comes from:
   catches wind farms and platforms but not bridges, which move between orbits (see Sentinel-1
   below), so look harder at targets near bridges.
 
-`s1tool.py` caches downloads in `$S1TOOL_CACHE`, or `~/.cache/s1tool` by default.
+`s1tool.py` caches downloads in `$S1TOOL_CACHE`, or `~/.cache/s1tool` by default; `nisartool.py` in
+`$NISARTOOL_CACHE`, or `~/.cache/nisartool`.
 
 ## Sentinel-2 commands
 
@@ -73,7 +82,7 @@ s2tool.py when ITEM LAT LON                           # imaging time, viewing an
 s2tool.py find ITEM --hex HEX [--out DIR]             # is this aircraft in the image? fit + overlay PNG
 s2tool.py find ITEM --track track.csv                 # same with any ADS-B source (time,lat,lon,alt_geom_ft,alt_baro_ft)
 s2tool.py identify ITEM LAT LON [--radius-km 15]      # which ADS-B aircraft made the streak near this point?
-s2tool.py crop LAT LON SIZE_M ITEM [ITEM ...] [--grid N] [--nir] [--out PNG]   # images to look at
+s2tool.py crop LAT LON SIZE_M ITEM [ITEM ...] [--grid N] [--nir] [--out PNG]   # images to look at; N = cells per side (e.g. 8), not metres
 s2tool.py ships ITEM LAT LON SIZE_M [--compare ITEM2] [--out PNG]   # ship candidates as a contact sheet
 s2tool.py ship-motion ITEM1 LAT1 LON1 ITEM2 LAT2 LON2 # speed and course from two sightings
 ```
@@ -218,7 +227,9 @@ s1tool.py crop LAT LON SIZE_M ITEM [ITEM ...] [--pol vv|vh] [--out PNG]
 ITEM is a GRD id such as `S1D_IW_GRDH_1SDV_20261012T170109_20261012T170134_004985_009693`, from
 `scenes`. `ships` writes `s1_ships/s1_ships.png` and `s1_ships.json` unless you pass `--out`.
 Typical times: `scenes` 10-30 s, `when` 2 s, `ships` 1.5-3 min for a 40 km box (it also reads
-three earlier passes; `--compare 0` skips them), `crop` 20-60 s per scene.
+three earlier passes; `--compare 0` skips them), `crop` 20-60 s per scene up to ~20 km. Wider crops
+read the whole GRD to geocode it and can take many minutes (a 150 km crop of two passes took ~15
+min); for a wide overview use a smaller crop or the browse images.
 
 When it helps: Sentinel-1C and 1D pass near 06:00 (descending) and 18:00 (ascending) local solar
 time, never at Sentinel-2's ~10:30, and see a place every 1-3 days. Use it when Sentinel-2 is
@@ -254,7 +265,10 @@ Reading it:
   --cog DEG --at TIME`: it dead-reckons to the radar's imaging time and applies the shift. Within
   ~100 m is a good match. Imaging times from `when` and `ships` are good to ~0.01 s.
 - Aircraft in flight are displaced by kilometres and smeared: don't look for them in radar images,
-  and don't read "not there" as anything. Parked aircraft show as bright targets.
+  and don't read "not there" as anything. Parked aircraft show as bright targets; for parked
+  aircraft use NISAR (finer pixels, HH and HV) where it has a pass, see NISAR below.
+- A bright stripe across the image is radio interference from a C-band emitter, not a feature on
+  the ground: see `references/rfi.md`. Sentinel-1 cannot see GPS jammers.
 - If someone shares a radar image (grey or false-colour, VV/VH labels, crosses around ships), the
   Sentinel-2 methods (bands, fringe, `s2tool`) don't apply to it.
 
@@ -280,6 +294,35 @@ radar can't name a ship. Readers can't see the tool's numbering: give positions,
 `s1_ships.png` if you refer to targets by number. Credit: "Contains modified Copernicus Sentinel
 data [year]".
 
+## NISAR (L-band radar): parked aircraft, sites, interference
+
+```
+nisartool.py scenes LAT LON START END [--release any|provisional|beta]   # passes; no login needed
+nisartool.py crop LAT LON SIZE_M GRANULE [GRANULE ...] [--gcov] [--looks 10] [--markers CSV]   # north-up HH, HV, HV-HH
+nisartool.py blobs LAT LON GRANULE [--size-km 120] [--max 3] [--min-db 6] [--pol HV|HH]   # interference blobs and where they centre
+nisartool.py rfimeta GRANULE [--pol HV] [--height M] [--tone-frac 0.05]   # what NISAR's RFI filter flagged; rough ground positions
+```
+`--markers` is a CSV with `lat` and `lon` columns (optional `label`), so the ADS-B track CSV used by
+`s2tool.py find --track` works.
+GRANULE is a name from `scenes` (any of GCOV, GSLC, RSLC; each command switches product). Read
+`references/nisar.md` before aircraft or site work and `references/rfi.md` before interference
+work: they hold the modes, releases, accuracy and traps. Key points:
+- Pixels: 5 m (GSLC) in the 40 MHz mode over North America and parts of Asia; 10 x 5 m elsewhere on
+  land. Passes near 06:00 and 18:00 local solar time, about twice per 12 days per area.
+- Two releases: BETA (passes Oct 2025-Jan 2026: uncalibrated, nothing removed by the RFI filter) and
+  PROVISIONAL (from mid-2026: calibrated, RFI filtered). The filter removes radar blobs from images
+  but not always-on broadband interference (Kaliningrad, Vladivostok); its record stays in RSLC and
+  shows that a removed emitter was there and its frequency, but places it only roughly (tens of km).
+- Parked aircraft: rows of large aircraft in the open are visible; aircraft at gates are lost in
+  building glare; a lone aircraft is a bright spot among other bright spots. Detection rates have
+  not been measured. HV showed fewer bright spots than HH and fades some walls and fences; whether
+  it helps or hurts aircraft detection is untested.
+- Interference: the brightest point of a blob was within ~8 km of known radars in 13 of 14 tests.
+  Hills inside a blob are most likely imprinted by the terrain correction; don't read them as
+  evidence of reflected interference.
+- Streaming windows takes seconds to a couple of minutes; never download whole files (1.5-26 GB).
+- Credit: "Contains NASA-ISRO NISAR data, NASA/JPL-Caltech/ISRO, distributed by ASF DAAC."
+
 ## Limits
 
 Sentinel-2: 10 m pixels; nothing at night; cloud blocks it; tiles appear hours after the pass (Earth
@@ -291,3 +334,8 @@ Validated on 13 tiles over the English Channel, northern France and Belgium (S2A
 
 Sentinel-1: validated on one evening ascending pass over Danish waters (calm to moderate sea) plus
 spot checks; small boats are under-sampled. See `references/validation.md`.
+
+NISAR: interference localization tested on 14 US radars (one pass each) and one Arctic site; the RFI
+record's ground mapping is rough (11-97 km for the strongest hotspot at 4 radars). Aircraft work is
+visual, at three sites, with no per-aircraft detection rates. Data needs an Earthdata Login. See
+`references/validation.md`.
