@@ -94,7 +94,8 @@ running `scenes` and `ships` got it right in about two minutes.
 
 ## NISAR (18 Oct 2026)
 
-Scripts and data for these checks live outside the skill (evals/nisar in the repo working tree).
+The supporting research scripts and data for these checks are unpublished and are not included
+with the skill. The findings and limitations are summarized below.
 
 Offline code regressions live in `tests/test_nisartool.py` in the repository; run
 `uv run tests/test_nisartool.py`. Synthetic grids check that blob searches exclude sources outside

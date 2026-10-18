@@ -42,10 +42,10 @@ installs their dependencies (numpy, scipy, pyproj, rasterio, requests, matplotli
 earthaccess for NISAR) from the inline script header:
 
 ```
-S2=<skill base directory>/scripts/s2tool.py
-S1=<skill base directory>/scripts/s1tool.py
-NI=<skill base directory>/scripts/nisartool.py
-uv run $S2 scenes 50.719 -0.209 2026-10-13 2026-10-16
+S2="<skill base directory>/scripts/s2tool.py"
+S1="<skill base directory>/scripts/s1tool.py"
+NI="<skill base directory>/scripts/nisartool.py"
+uv run "$S2" scenes 50.719 -0.209 2026-10-13 2026-10-16
 ```
 
 Where the data comes from:

@@ -63,9 +63,9 @@ KT = 0.514444
 # Detector settings from the AIS benchmark (see the module docstring).
 MIN_VV_DB, MIN_CONTRAST_DB, MIN_VH_DB = -6.0, 8.0, -20.0
 MERGE_M, FIXED_M, OSM_M, COAST_BUFFER_PX = 150.0, 120.0, 150.0, 60
-# Ghost check (evals/sentinel1/ghosts.py: 2 of 23 benchmark false alarms were ghosts of big ships,
+# Ghost check (see references/validation.md): 2 of 23 benchmark false alarms were ghosts of big ships,
 # ~30 dB fainter, within 10 m along / 31 m across of the predicted spot; a real boat near a
-# predicted spot was 21 dB fainter and 124 m across).
+# predicted spot was 21 dB fainter and 124 m across.
 GHOST_DB, GHOST_ALONG_M, GHOST_ACROSS_M, GHOST_MAX_DB = 25.0, 300.0, 100.0, 10.0
 SEAMARK_SQL = '^(buoy_|beacon_|light|platform|pile|daymark|fog_signal)'
 warnings.filterwarnings('ignore', category=RuntimeWarning)  # all-NaN blocks over land
