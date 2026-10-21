@@ -18,7 +18,7 @@ import unittest
 from unittest import mock
 
 import numpy as np
-from pyproj import CRS, Transformer
+from pyproj import CRS, Geod, Transformer
 
 
 _runtime = tempfile.TemporaryDirectory(prefix='nisartool-tests-')
@@ -169,6 +169,129 @@ class NisarTests(unittest.TestCase):
         self.assertIn(new, out.getvalue())
         self.assertNotIn(old + '\n', out.getvalue())
         self.assertIn('1 pass(es)', out.getvalue())
+
+    def test_scenes_counts_adjacent_frames_as_one_pass(self):
+        f18 = 'NISAR_L2_PR_GCOV_022_034_A_018_4005_DHDH_A_20260604T130753_20260604T130828_P05023_N_F_J_001'
+        f19 = 'NISAR_L2_PR_GCOV_022_034_A_019_4005_DHDH_A_20260604T130827_20260604T130902_P05023_N_F_J_001'
+        nxt = 'NISAR_L2_PR_GCOV_023_034_A_018_4005_DHDH_A_20260616T130752_20260616T130827_P05023_N_F_J_001'
+        args = SimpleNamespace(lat=33.81, lon=-117.92, start='2026-06-01', end='2026-06-30', release='any', all_modes=False)
+        out = io.StringIO()
+        with mock.patch.object(nt, 'cmr', return_value=[{'title': f19}, {'title': nxt}, {'title': f18}]), contextlib.redirect_stdout(out):
+            nt.cmd_scenes(args)
+        self.assertIn('2 pass(es)', out.getvalue())
+        self.assertIn(f'same pass (frames overlap; use either): {f19}', out.getvalue())
+
+    def test_pooled_beam_shape_recovers_hump_vertex(self):
+        rng = np.random.default_rng(3)
+        pool = []
+        for _ in range(150):  # each pulse sees 17 km of the hump, with its own gain
+            r = 940e3 + rng.uniform(-25e3, 8e3) + np.arange(0, 17e3, 150.)
+            pool.append((r, rng.normal(0, 3) - (r - 945e3) ** 2 / (2 * 20e3 ** 2) + rng.normal(0, .05, r.size), 0.))
+        self.assertLess(abs(nt._pooled(pool)[0] - 945e3), 300)
+
+    def _synthetic_pass(self, lat, lon, h):
+        """Circular orbit with its ground track ~270 km east of the point, moving north: orbit metadata,
+        and the true beam-crossing time and slant range of the point."""
+        e = nt.ecef(lat, lon, h)
+        u = nt.ecef(lat, lon + 3.0, 0.); u /= np.linalg.norm(u)
+        n = np.cross(np.cross(u, [0, 0, 1.]), u); n /= np.linalg.norm(n)
+        rs, w = 6378e3 + 747e3, 7480. / (6378e3 + 747e3)
+        t = np.arange(-200., 200., 1.)
+        m = {'ot': t, 'opos': rs * (np.cos(w * t)[:, None] * u + np.sin(w * t)[:, None] * n),
+             'ovel': rs * w * (-np.sin(w * t)[:, None] * u + np.cos(w * t)[:, None] * n), 'fc': 1239e6, 'left': True}
+        o = nt.RawOrbit(m)
+        tt = np.linspace(-60, 60, 120001)
+        _, rd = o.rdot(tt, e)
+        tb = float(tt[np.argmin(np.abs(-2 * m['fc'] * rd / nt.LIGHT - nt.FDC_NOMINAL))])
+        return m, tb, float(np.linalg.norm(o.p(tb) - e))
+
+    def test_raw_fix_recovers_emitter_left_of_track(self):
+        lat, lon, h = 35.08, -117.58, 800.
+        m, tb, R = self._synthetic_pass(lat, lon, h)
+        cues = {'R': R, 'Rse': 300., 'tR': tb, 'tb': tb, 'tbse': .15}
+        with mock.patch.object(nt, 'dem_height', return_value=h):
+            fix = nt.raw_fix([nt.RawPass(m, cues, None, 0.)])
+        _, _, d = Geod(ellps='WGS84').inv(lon, lat, fix['lon'], fix['lat'])
+        self.assertLess(d, 30)
+        self.assertTrue(fix['height_converged'])
+
+    def test_raw_pulses_finds_long_pulse_and_clipping(self):
+        rng = np.random.default_rng(5)
+        fs, nl, nc = 24e6, 600, 8192  # 341 us lines: a pulse fills a minority of each, as in real windows
+        lut = np.arange(4096) - 2047.5  # code -> value
+        sig = rng.normal(0, 3, (nl, nc)) + 1j * rng.normal(0, 3, (nl, nc))
+        k = np.arange(nc) / fs
+        tp = int(88e-6 * fs)
+        for i in range(nl):
+            if i < 80 or 200 <= i < 240:  # complete 88 us chirps at +1 MHz, 12 kHz/us; lines 200-239 saturate
+                s0 = 500 + (i * 37) % 4000
+                tt = k[:tp]
+                amp = 5000. if i >= 200 else 200.
+                sig[i, s0:s0 + tp] += amp * np.exp(2j * np.pi * (1e6 * tt + 6e9 * (tt - tt.mean()) ** 2))
+            elif i < 500:  # more numerous 12 us fragments of the same emitter
+                s0 = 300 + (i * 53) % 7000
+                sig[i, s0:s0 + int(12e-6 * fs)] += 200. * np.exp(2j * np.pi * 1e6 * k[:int(12e-6 * fs)])
+        code = lambda v: np.clip(np.round(v + 2047.5), 0, 4095).astype(np.uint16)
+        raw = np.stack([code(sig.real), code(sig.imag)], -1)
+        m = {'utc': np.arange(nl) * 5e-4, 'sr': 900e3 + np.arange(nc) * nt.LIGHT / (2 * fs)}
+        p, _ = nt.raw_pulses(raw, lut, m, 0, 0, 1e6, 1.5e6)
+        self.assertAlmostEqual(p['tp_us'], 88, delta=3)
+        self.assertGreaterEqual(len(p['line']), 100)
+        clipped = set(p['line'][p['clipped']])
+        self.assertTrue(clipped and clipped <= set(range(200, 240)))
+        self.assertLess(np.median(p['phrms'][p['line'] < 80]), .6)  # linear chirps pass the chirp-fit test
+
+    def test_joint_fix_weights_each_pass_by_its_own_spread(self):
+        lat, lon, h = 35.08, -117.58, 800.
+        m, tb, R = self._synthetic_pass(lat, lon, h)
+        good = nt.RawPass(m, {'R': R, 'Rse': 300., 'tR': tb, 'tb': tb, 'tbse': .15}, None, 0.)
+        bad = nt.RawPass(m, {'R': R + 20e3, 'Rse': 100e3, 'tR': tb, 'tb': tb, 'tbse': .15}, None, 0.)
+        with mock.patch.object(nt, 'dem_height', return_value=h):
+            fix = nt.raw_fix([good, bad])
+        _, _, d = Geod(ellps='WGS84').inv(lon, lat, fix['lon'], fix['lat'])
+        self.assertLess(d, 200)  # equal weights would put it ~10 km off
+
+    def test_raw_window_drops_completion_log_of_a_deleted_file(self):
+        key = nt.cache_path('rawwin|g|p|0|1024|0|8')[:-4] + '.npy'
+        log = key[:-4] + '.blocks'
+        with open(log, 'w') as fh:
+            fh.write('0 512 ')
+        with mock.patch.object(nt, 'raw_blocks') as rb, contextlib.redirect_stdout(io.StringIO()):
+            raw = nt.raw_window('g', 'u', {'path': 'p'}, 0, 1024, 0, 8, 1)
+        self.assertEqual([j[2] for j in rb.call_args[0][0]], [0, 512])  # both blocks read again
+        self.assertFalse(os.path.exists(log))
+        self.assertEqual(raw.shape, (1024, 8, 2))
+
+    def _noise_profile(self, peak_block):
+        nb, ncol = 60, 400
+        sr = 900e3 + np.arange(ncol) * 100.
+        m = {'utc': np.arange(nb * 512 + 512) / 1600., 'sr': sr}
+        lines = np.arange(nb) * 512
+        az = np.exp(-(np.arange(nb) - peak_block) ** 2 / (2 * 8. ** 2))
+        prof = 1. + 50 * az[:, None] * np.exp(-(sr - 920e3) ** 2 / (2 * 3e3 ** 2))[None, :]
+        return prof, lines, m
+
+    def test_noise_cues_flag_an_envelope_cut_by_the_read(self):
+        prof, lines, m = self._noise_profile(30)
+        c = nt.raw_noise_cues(prof, lines, m, (0, 100), (900e3, 940e3))
+        self.assertFalse(c['edge'])
+        self.assertLess(abs(c['R'] - 920e3), 1e3)
+        prof, lines, m = self._noise_profile(-5)  # peak before the first block read
+        self.assertTrue(nt.raw_noise_cues(prof, lines, m, (0, 100), (900e3, 940e3))['edge'])
+
+    def test_noise_cues_without_excess_power_return_none(self):
+        prof, lines, m = self._noise_profile(30)
+        self.assertIsNone(nt.raw_noise_cues(np.ones_like(prof), lines, m, (0, 100), (900e3, 940e3)))
+
+    def test_find_rrsd_keeps_newest_version_of_each_raw_acquisition(self):
+        mk = lambda t0, t1, v: {'title': (f'NISAR_L0_PR_RRSD_010_005_A_018S_{t0}_{t1}_P05023_F_J_{v}'),
+                                'links': [{'href': f'https://x/NISAR_L0_PR_RRSD_010_005_A_018S_{t0}_{t1}_P05023_F_J_{v}.h5'}]}
+        a, b = ('20260109T125000', '20260109T125130'), ('20260109T125130', '20260109T125300')
+        entries = [mk(*a, '001'), mk(*a, '002'), mk(*b, '001'),
+                   {'title': 'NISAR_L0_PR_RRSD_010_006_A_018S_20260109T125000_20260109T125130_P05023_F_J_001'}]
+        with mock.patch.object(nt, 'cmr', return_value=entries):
+            got = sorted(n for n, _ in nt.find_rrsd(GRANULE))
+        self.assertEqual(got, sorted([mk(*a, '002')['title'], mk(*b, '001')['title']]))
 
 
 if __name__ == '__main__':

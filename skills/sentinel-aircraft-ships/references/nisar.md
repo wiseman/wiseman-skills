@@ -47,8 +47,8 @@ try the other pass direction or another cycle.
   Finest detail; use it for aircraft, ships and sites. `crop` uses it by default and averages to
   about 10 x 10 m. Don't compare dB values between a GSLC and a GCOV crop.
 - RSLC (L1): radar-geometry SLC. Its metadata holds the RFI filter's record (`rfimeta`).
-- RRSD (L0B raw echoes): public from the PROVISIONAL release, 2-10 h after the pass. Not used by
-  the tool.
+- RRSD (L0B raw echoes, 10-75 GB per granule): public from the PROVISIONAL release, 2-10 h after
+  the pass, also for some earlier passes. `rawfix` reads windows of it to locate emitters (`rfi.md`).
 - BETA (pre-calibration, CRIDs X05007-X05010): a subset of passes from 12 Oct 2025 to 20 Jan 2026
   (up to 8 per track), not every pass. Uncalibrated (compare brightness only within one channel of
   one image) and no RFI removed.
@@ -160,6 +160,13 @@ Interference stands out most against weak cross-pol returns, so check the scene 
 blobs or streaks (`rfi.md`) before trusting HV over a region, especially over Russia.
 
 ## Other uses
+
+Change between dates: `crop` several granules of the same track (12 days apart) and compare. Don't
+compare an ascending with a descending pass for change: they look from opposite sides, so buildings
+change brightness whatever happened. Averaging a few passes before and after and subtracting showed
+a demolished building at Disneyland as a clear dark patch. For a
+short-lived object, check whether Sentinel-1 or the other NISAR direction passed within hours:
+NISAR and Sentinel-1 both pass near 06:00 and 18:00.
 
 Ships: same `crop`; L-band sees ships well at sea, but there is no NISAR ship detector here (use
 Sentinel-1 `ships` for detection). Open ocean is mostly `0005` (80 m, VV only), so ships far

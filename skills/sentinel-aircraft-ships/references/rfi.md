@@ -9,8 +9,8 @@ images, "glows", "blobs" or "streaks" in SAR, or the NISAR RFI filter.
   (40 MHz) or 1219-1296 MHz (77 MHz), plus usually a side band (frequency B) at 1291-1296 MHz.
   The rarer 5+5 mode records 1219-1224 and 1234-1239 MHz, and 20+20 adds 1276-1296 MHz (table in
   `nisar.md`). GPS L2 (1227.6 MHz) is inside the main band in the 20, 40 and 77 MHz modes, not in
-  5+5. L-band air-surveillance radars (1215-1400 MHz, FAA/USAF ARSR-4 and others) appear when their
-  channel falls inside the recorded band.
+  5+5. L-band air-surveillance radars (1215-1400 MHz: FAA/USAF ARSR-4, FAA CARSR and others) appear
+  when their channel falls inside the recorded band.
 - Sentinel-1 C-band records about 5.355-5.455 GHz. It cannot see GNSS jammers (no GNSS frequency is
   in its band). It sees C-band radars such as Patriot (AN/MPQ-53/65) and some naval and air-defence
   radars, and other C-band SARs. Claims that Sentinel-1 shows GPS jamming are wrong unless the
@@ -67,6 +67,8 @@ images, "glows", "blobs" or "streaks" in SAR, or the NISAR RFI filter.
   has several `raw*` chunks; read them all. Inside persistent broadband interference `signalMean`
   rises (+25-30 dB at Kaliningrad) while flags drop. GCOV `rfiLikelihood` is unreliable (values far
   outside its documented 0-1 range) and GCOV `rfiMitigationApplied=False` refers only to the GCOV step.
+- An always-on radar shows in the record on every pass: at Boron (an FAA radar) a hotspot appeared on
+  all 48 PROVISIONAL passes in a year, 0.6-22 km from the radar (median 9.5 km), in both directions.
 - Tones at 1233.1, 1239.0, 1293.5 and 1296.0 MHz are flagged on many passes everywhere we looked;
   `rfimeta` excludes bins whose pass-average flagged share exceeds `--tone-frac` (default 0.05),
   plus four neighbouring bins on each side. This is a background heuristic: exclusion alone
@@ -90,7 +92,10 @@ Synopsis in SKILL.md; `--help` lists every option.
   their main frequencies, and converts them to ground positions allowing for the beam's forward squint
   (pass `--height` for an emitter on high ground). Writes PNG + JSON. The positions are rough: the
   strongest hotspot was 11-24 km from 3 of 4 known radars and 97 km from the fourth, and weaker
-  hotspots are often spurious. Treat them as "an emitter was active in this region at this frequency".
+  hotspots are often spurious. Treat them as "an emitter was active in this region at this frequency",
+  and use the hotspot as the starting point for `rawfix`. The hotspot's top frequency can be a
+  background tone: at Boron it was the 1239.0 MHz tone on 8 of 48 passes, with the radar's frequency
+  second or third, so read all three `main_freqs_MHz`.
   Check each frequency's JSON `flag_status` before interpreting `flag_hotspots`: `ok` means the
   analysis ran; `no_frequency_bins` means tone exclusion left no bins to analyze. The latter
   produces an explicit notice in the PNG and terminal, while the full spectrum and any available
@@ -98,24 +103,71 @@ Synopsis in SKILL.md; `--help` lists every option.
   `tone_frac` record the exclusion settings. An unavailable analysis is not a negative detection.
   Raising `--tone-frac` retains more bins, but changes the background assumption; disclose the
   setting when comparing runs rather than adjusting it solely to obtain a hotspot.
+- `rawfix` locates an emitter from the raw echoes; see the next section.
 - Find candidate passes with `scenes`; check public browse images for blobs before streaming data.
+
+## Locating an emitter from the raw echoes (`rawfix`)
+
+How it works: NISAR's receive beam is steered across the swath as each echo arrives, so inside any
+received pulse the emitter's power peaks at the sample whose slant range points the beam at the
+emitter. A fit of that hump over many pulses (common beam shape, free gain per pulse) gives the
+slant range. The emitter's power over time (the azimuth envelope) gives when the beam crossed it,
+and with the Doppler centroid from the pass's RSLC, the along-track position. The height comes
+from the Copernicus DEM. The RFI filter acts only on processed products, so this works on every
+PROVISIONAL pass that has raw data (RRSD, public 2-10 h after the pass).
+
+- `rawfix LAT LON GRANULE [GRANULE ...]`: LAT LON only chooses what to read. It should be within
+  about 10 km of slant range and a few seconds of beam time: an `rfimeta` hotspot or a blob centre is
+  enough. Each GRANULE is any product name of a pass from `scenes`; the tool finds the raw granule
+  (if the frame straddles two, the one with most data either side of the beam crossing). Granules
+  that come from the same raw acquisition (two products or adjacent frames of one pass) are used once.
+- It reads about 15 s of raw echoes over ~38 km of slant range in the 40 MHz mode (1.4 GB, cached;
+  2-5 min), finds the
+  strongest narrowband lines, detects complete pulses and takes the commonest long pulse. With
+  linear chirps it keeps pulses that fit a chirp; with non-linear sweeps (CARSR) it uses all
+  complete pulses. `--freq-mhz` picks another line.
+- If it finds no pulses, it treats the source as continuous interference (`--kind noise`, for
+  jammers): it streams the whole swath for ~50 s (tens of GB, tens of minutes, not kept) and fits the
+  same cues to the power profile, over the whole recorded band unless `--freq-mhz` (with
+  `--bw-mhz`) picks a band. The range correction below is not applied: it was measured on pulsed
+  radars. Not tested against a known transmitter. At Kaliningrad two such
+  fixes on different dates were 16 km apart; we could not tell two emitters from a bias for a very
+  strong, 45 km-wide source.
+- Accuracy: single-pass fixes were 0.1-2.7 km (median 2.0) from 8 known ARSR-4 radars with the range
+  correction, which is leave-one-out (`validation.md`). The range cue reads short by 0.91 km on
+  average (sd 0.70), and the tool adds that back to pulse fixes (`--no-bias-correction` to turn it
+  off). The
+  beam-crossing time is unbiased (sd 0.21 s, about 1.5 km along track). The printed "95% within"
+  radius is a Monte Carlo over those spreads (about 3 km for one pass), not a guarantee.
+- Several passes give a joint fix. Use both directions: the along-track errors of ascending and
+  descending passes run in different directions and partly cancel. At Boron 4 passes gave a fix 1.3 km
+  from the radar, against 1.5-5.3 km for single passes. Each pass is weighted by its spread (the
+  validated one, or the cue's own if larger), so a shaky pass pulls less. If a pass disagrees by more
+  than 3 times its spread the tool warns: check each pass, since there may be two emitters.
+- Read the warnings. A hump or envelope cut by the edge of the data (swath edge, granule start)
+  biases the cue; split halves of the pulses that disagree by over 3 km mean the range fit is
+  unstable. The tested accuracy may not carry over to other emitters: on the strong, non-linear
+  CARSR at Boron the cues were about twice as noisy as in validation and one pass was 5.3 km off.
+  Clipped pulses (counted in the output) were common at good and bad sites alike.
+- The output also characterises the signal (pulse length, linear-fit sweep rate, how well a linear
+  chirp fits, other narrowband lines), which helps identify the emitter (below).
 
 ## Workflows
 
 **Is there a transmitter near X, and where exactly?**
-1. `nisartool.py scenes` over X. Prefer BETA passes for radars (unfiltered); any release for
-   always-on broadband sources. BETA covers only some passes before 20 Jan 2026. Unfiltered data
-   for later passes exists only as raw L0B (RRSD, public since July 2026), which the tool doesn't
-   read.
-2. `blobs` around X on one or more passes. Report the brightest point (and centre if the blob fits),
-   the peak in dB above background, the pass time and the tested accuracy (above). Agreement
-   between passes has not been tested: two estimates can each be within 8 km yet 16 km apart, so
-   don't reject a single fixed emitter because passes disagree by that much.
-3. If several blobs: they may be several emitters, or one emitter heard through sidelobes. Check
-   whether they repeat across passes.
-4. In PROVISIONAL products with no blob, run `rfimeta` to see whether the filter removed something
-   there: hotspots give time, range and main frequency, and only a rough ground position (see
-   above). To pin it down, look for the same source in a BETA pass with `blobs`.
+1. `nisartool.py scenes` over X. Recent passes are PROVISIONAL (filtered); BETA (unfiltered images)
+   covers only some passes before 20 Jan 2026.
+2. Is something there? On PROVISIONAL passes run `rfimeta`: hotspots give time, range, main
+   frequency and a rough ground position. On BETA passes run `blobs`. Always-on broadband sources
+   also survive as blobs in PROVISIONAL images.
+3. Where is it? `rawfix` with the hotspot or blob as LAT LON, on two or more passes from both
+   directions if you can. Report the fix, the tested accuracy (above) and any warnings. Without raw
+   data (some early passes), fall back to the blob's brightest point (and centre if the blob fits)
+   with its tested accuracy. Blob agreement between passes has not been tested: two estimates can
+   each be within 8 km yet 16 km apart, so don't reject a single fixed emitter for that.
+4. If several blobs or hotspots: they may be several emitters, or one emitter heard through
+   sidelobes. Check whether they repeat across passes, and compare their frequencies.
+5. What is it? See below.
 
 **What is this glow / streak in a Sentinel-1 image?**
 1. Find the pass (`s1tool.py scenes`), look with `s1tool.py crop ... --pol vh` at a size that shows
@@ -128,6 +180,24 @@ Synopsis in SKILL.md; `--help` lists every option.
    noise reports). Its burst metrics were high even over quiet Danish waters in our one check, so
    don't treat them as a detector without validation.
 
+**What is the emitter?** A position alone rarely identifies a transmitter; the signal often does.
+- ARSR-4 (FAA/USAF long-range radar): single 88 us linear up-chirps at about 12.2 kHz/us (chirp-fit
+  residual ~0.5 rad), carriers 1241.5-1257 MHz; a site can show two lines (two channels). Same at all
+  8 sites tested.
+- CARSR (FAA long-range radar, Boron): a ~117 us non-linear sweep (`rawfix` measures ~111 us at half
+  power, a linear-fit 8.2 kHz/us and a poor chirp fit, ~1.6 rad), plus a ~20 us pulse 5.2 MHz lower
+  that `rawfix` lists as a second line. Separate analysis also found it ~260 us after the long
+  pulse, and three staggered pulse intervals (2744.5, 3157.0, 3472.7 us), as published for a CARSR
+  in Puerto Rico.
+- The waveform gives the type, the position the site: check site lists (Wikipedia's Joint
+  Surveillance System list, FortWiki's CARSR list, OpenStreetMap towers) near the fix.
+- A source on every pass for months is an always-on surveillance radar, not scheduled range activity:
+  NOTAMs won't explain it.
+- A radar near the fix in another band can't be the source: the KEYX weather radar (S-band) was 1.6
+  km from the Boron fix.
+- A second signal nearby is not necessarily the same transmitter: at Boron a CARSR-like signal at
+  1294.5 MHz (frequency B) was not time-locked to the 1255.6 MHz radar. `rawfix` reads frequency A only.
+
 **Is this jamming?** Radar sees a transmitter, not its purpose. Combine a blob with independent
 evidence: ADS-B NACp/NIC degradation at the same time and place, NOTAMs for GPS tests, known sites.
 Earlier attempts to locate jammers from SAR streak geometry were off by 10-178 km (Kaliningrad,
@@ -136,8 +206,9 @@ Shiraz); the NISAR blob centre is the better method.
 ## Reporting
 
 - Say which satellite, pass time (Z), direction, release (BETA unfiltered / PROVISIONAL filtered).
-- Give positions with the method and its tested accuracy ("brightest point of the blob; within
-  ~8 km of known radars in 13 of 14 tests"), not more precision than that.
+- Give positions with the method and its tested accuracy ("raw-data fix; single-pass fixes were
+  0.1-2.7 km from 8 known radars" or "brightest point of the blob; within ~8 km of known radars in 13
+  of 14 tests"), not more precision than that.
 - Say what the radar can't tell you (emitter type, purpose) and what corroborates it.
 - Credit: "Contains NASA-ISRO NISAR data, NASA/JPL-Caltech/ISRO, distributed by ASF DAAC" (cite
   the collection DOI in a report, see `nisar.md`) and/or "Contains modified Copernicus Sentinel

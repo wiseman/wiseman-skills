@@ -101,8 +101,14 @@ Offline code regressions live in `tests/test_nisartool.py` in the repository; ru
 `uv run tests/test_nisartool.py`. Synthetic grids check that blob searches exclude sources outside
 the requested square in UTM and polar projections and flag blobs cut by its boundary. Synthetic
 RFI records check unavailable analysis when all bins are excluded, preservation of level analysis
-and other frequency bands, and ordinary flag detection. These verify software behavior, not
-emitter-localization accuracy or detection rates on real passes.
+and other frequency bands, and ordinary flag detection. Synthetic raw data check that `rawfix`
+recovers a beam-shape vertex, finds the long pulse among more numerous fragments, flags clipped
+pulses, puts a fix left of the track at the right place, and weights a joint fix by each pass's
+spread; noise mode flags an envelope cut by the read and gives up on a profile with no excess power;
+a restarted raw read doesn't trust the completion log of a deleted cache file; the raw-granule
+lookup keeps the newest version of each acquisition; `scenes` counts adjacent frames of one pass
+once. These verify software behavior, not emitter-localization accuracy or detection rates on
+real passes.
 
 ### Interference blobs vs known emitters
 
@@ -123,6 +129,42 @@ emitter-localization accuracy or detection rates on real passes.
   smoothed patch per chunk instead gave 18, 19, 1.7 and 0.9 km in the best chunk, but other chunks
   gave 100+ km false patches, and choosing the right chunk needs the answer. The flag record is a
   rough indicator, not a locator.
+
+- Boron FAA radar (CARSR), BETA, 23 and 29 Dec 2025, 4 Jan 2026: one dominant blob each, 22.7-23.4
+  dB above background; brightest points 4.4-6.6 km from the radar, centres 2.2-3.9 km (the blobs ran
+  off the 120 km window, so the tool flagged the centres as unreliable).
+- `rfimeta` at Boron, all 48 PROVISIONAL passes 23 Nov 2025-19 Oct 2026 (25 descending, 23 ascending):
+  a hotspot near Boron on every pass, 0.6-22 km from the radar (median 9.5 km). Top frequency
+  1255.6-1255.9 MHz (the radar) on 39 passes, 1250.5 MHz (its short pulse) on 1, and the 1239.0 MHz
+  tone on 8 (all ascending), with the radar second or third.
+
+### Raw-data fixes (`rawfix`, Oct 2026)
+
+- 8 FAA ARSR-4 sites (Ajo, San Clemente Island, Melbourne, Key West, Tyndall, Fort Fisher, Oklahoma
+  City, Makah), one PROVISIONAL raw pass each (Jan 2026), read window offset at random by up to
+  +-2 s and +-10 km from the radar. Research scripts: errors 0.35-3.50 km as measured (median 2.1);
+  the range cue read short at 7 of 8 sites (mean 0.91 km, sd 0.70); beam-crossing time error mean
+  +0.02 s, sd 0.21 s. With the range correction estimated leave-one-out: 0.14-2.69 km (median 2.0).
+  The image-blob method on the same passes: median 6.5 km.
+- `rawfix`'s own code on the same cached windows: 0.36-4.16 km as measured (median 2.0); with the
+  0.91 km correction 0.0-2.70 km (median 1.8; in-sample, since the correction came from these sites).
+  It found the radar's line at all 8 (at Makah and Oklahoma City a different channel of the same radar
+  from the earlier scripts, with similar errors) and the 88 us pulse length at all 8.
+- Split halves of each site's pulses gave ranges 0.2-1.7 km apart at 7 sites and 5.9-6.6 km at
+  Tyndall (fix still 2.0 km off). Key West's pass started at the radar, so its envelope was cut by
+  the granule start (flagged); its fix was 1.9 km off.
+- Two sites failed in the research scripts: Deming (range fit diverged, flagged by its own uncertainty)
+  and Cross City (a 470 kHz non-chirp signal, no pulses to detect).
+- Boron CARSR (non-linear sweep), 4 PROVISIONAL passes 25 Sep-13 Oct 2026, starting from each pass's
+  `rfimeta` hotspot: single-pass fixes 1.5, 2.3, 2.4 and 5.3 km from the radar (the 5.3 km one is the
+  7 Oct ascending pass, whose envelope has a flat top and an abrupt drop we can't explain). Joint fix
+  of all 4: 1.3 km from the radar. Ranges read short by 0.9-2.5 km before correction (more than in
+  validation) and beam-crossing times scattered about twice as much. End to end through the CLI on the
+  13 Oct pass (raw granule found from the GCOV name, its own window): 1.5 km.
+- Kaliningrad (continuous interference, noise mode), PROVISIONAL Oct 2026, no ground truth: tracks
+  028 (ascending) and 080 (descending) gave fixes 16.6 km apart on different dates; 100 and 152
+  had the power hump cut by the swath edge (flagged). The tool's noise mode (no range correction)
+  reproduced the research fixes to 0.15-0.3 km.
 
 ### RFI filter (tone-rank) impact
 

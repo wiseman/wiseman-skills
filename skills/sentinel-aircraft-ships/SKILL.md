@@ -6,7 +6,8 @@ description: >-
   matching aircraft or colour-fringed streaks to ADS-B tracks (hex, registration or
   callsign); ship detection and motion; distinguishing SAR targets from ghosts and
   sidelobes; inspecting parked aircraft in HH/HV; or investigating interference blobs,
-  streaks, GPS/GNSS jammers, radar emitters and NISAR's RFI filter record. Accepts named
+  streaks, GPS/GNSS jammers, radar emitters, NISAR's RFI filter record, or locating an
+  L-band radar or jammer from NISAR raw data. Accepts named
   passes and satellite-image screenshots, including Copernicus Browser. Covers data
   access, localization limits and evidence needed to interpret detections.
 compatibility: >-
@@ -25,8 +26,8 @@ Which satellite for what:
 - Sentinel-1 (C-band radar, "Sentinel-1" near the end): ships at dawn and dusk, at night and through
   cloud, but not aircraft in flight; C-band radar emitters as streaks.
 - NISAR (L-band radar, "NISAR" near the end, details in `references/nisar.md`): parked aircraft and
-  sites in HH/HV at 5-10 m; radio interference in the 1.2 GHz band (GPS L2, L-band radars) as blobs
-  centred near the transmitter.
+  sites in HH/HV at 5-10 m; radio interference in the 1.2 GHz band (GPS L2, L-band radars), with
+  the transmitter located to about 2 km from the raw echoes.
 - Radio interference with either radar: `references/rfi.md`.
 
 Sentinel-2 (S2A, S2B, S2C) images the Earth at 10 m per pixel in a 290 km swath, on daytime
@@ -230,7 +231,9 @@ min); for a wide overview use a smaller crop or the browse images.
 When it helps: Sentinel-1C and 1D pass near 06:00 (descending) and 18:00 (ascending) local solar
 time, never at Sentinel-2's ~10:30, and see a place every 1-3 days. Use it when Sentinel-2 is
 cloudy or dark, or for a ship's position at dawn or dusk (with Sentinel-2, a track across the
-day). It can't confirm a Sentinel-2 sighting at the same moment. Passes appear ~4 h after
+day). It can't confirm a Sentinel-2 sighting at the same moment. NISAR also passes near 06:00 and
+18:00, so the two radars can see a place within an hour of each other (44 min apart at Anaheim on
+14 Oct 2026): use one to confirm a short-lived object in the other. Passes appear ~4 h after
 imaging; `scenes` also lists ones so far only on Copernicus Data Space.
 
 Reading it:
@@ -297,6 +300,7 @@ nisartool.py scenes LAT LON START END [--release any|provisional|beta]   # passe
 nisartool.py crop LAT LON SIZE_M GRANULE [GRANULE ...] [--gcov] [--looks 10] [--markers CSV]   # north-up HH, HV, HV-HH
 nisartool.py blobs LAT LON GRANULE [--size-km 120] [--max 3] [--min-db 6] [--pol HV|HH]   # interference blobs and where they centre
 nisartool.py rfimeta GRANULE [--pol HV] [--height M] [--tone-frac 0.05]   # what NISAR's RFI filter flagged; rough ground positions
+nisartool.py rawfix LAT LON GRANULE [GRANULE ...] [--kind auto|pulse|noise] [--freq-mhz F]   # emitter position from the raw echoes
 ```
 `--markers` is a CSV with `lat` and `lon` columns (optional `label`), so the ADS-B track CSV used by
 `s2tool.py find --track` works.
@@ -314,12 +318,23 @@ work: they hold the modes, releases, accuracy and traps. Key points:
   building glare; a lone aircraft is a bright spot among other bright spots. Detection rates have
   not been measured. HV showed fewer bright spots than HH and fades some walls and fences; whether
   it helps or hurts aircraft detection is untested.
-- Interference: the brightest point of a blob was within ~8 km of known radars in 13 of 14 tests.
-  Hills inside a blob are most likely imprinted by the terrain correction; don't read them as
-  evidence of reflected interference.
+- Locating an emitter: `rawfix` reads the raw echoes, which the RFI filter never touches, so it
+  works on every recent pass. Single-pass fixes were 0.1-2.7 km (median 2.0) from 8 known radars;
+  passes from both directions combine into one fix. LAT LON is only a rough starting point (an
+  `rfimeta` hotspot or a blob). It reads about 1.4 GB per pass (a few minutes); continuous
+  interference such as jamming (`--kind noise`) streams the whole swath (tens of GB) and is
+  untested against a known transmitter. Details and traps in `references/rfi.md`.
+- Interference blobs (BETA): the brightest point was within ~8 km of known radars in 13 of 14
+  tests. Hills inside a blob are most likely imprinted by the terrain correction; don't read them
+  as evidence of reflected interference.
 - For `rfimeta`, check each frequency's `flag_status` in the JSON. `no_frequency_bins` means the
   flag analysis was unavailable after tone exclusion, not that no emitter was present. The full
   spectrum and available level hotspots still help; interpretation is in `references/rfi.md`.
+  The top frequency at a hotspot can be a background tone (1239.0 MHz) even over a radar: read all
+  three `main_freqs_MHz`.
+- Change between dates: compare passes of the same track. An ascending and a descending pass look
+  from opposite sides, so buildings change brightness between them whatever happened on the ground.
+  `scenes` shows adjacent frames of one pass as one pass ("also in frame ..."): use either.
 - Streaming windows takes seconds to a couple of minutes; never download whole files (1.5-26 GB).
   Without a login, NASA Worldview/GIBS has daily 15.6 m false-colour mosaics of PROVISIONAL data
   (URL in `references/nisar.md`) that show aircraft rows and strong interference.
@@ -338,7 +353,9 @@ Validated on 13 tiles over the English Channel, northern France and Belgium (S2A
 Sentinel-1: validated on one evening ascending pass over Danish waters (calm to moderate sea) plus
 spot checks; small boats are under-sampled. See `references/validation.md`.
 
-NISAR: interference localization tested on 14 US radars (one pass each) and one Arctic site; the RFI
-record's ground mapping is rough (11-97 km for the strongest hotspot at 4 radars). Aircraft work is
+NISAR: raw-data fixes tested on 8 FAA ARSR-4 radars (one pass each) and the FAA radar at Boron
+(4 passes); the continuous-interference mode has no ground truth. Blob localization tested on 14 US
+radars (one pass each) and one Arctic site; the RFI record's ground mapping is rough (11-97 km for the
+strongest hotspot at 4 radars, 0.6-22 km over 48 passes at Boron). Aircraft work is
 visual, at three sites, with no per-aircraft detection rates. Data needs an Earthdata Login. See
 `references/validation.md`.
