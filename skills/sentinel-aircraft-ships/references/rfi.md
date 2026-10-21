@@ -5,10 +5,12 @@ images, "glows", "blobs" or "streaks" in SAR, or the NISAR RFI filter.
 
 ## Which satellite can see what
 
-- NISAR L-band records about 1219-1239 MHz (20 MHz mode) or 1219-1259 MHz (40 MHz mode), plus a
-  5 MHz side band near 1291-1296 MHz. GPS L2 (1227.6 MHz) is inside the main band in the 20, 40 and
-  77 MHz modes (not the 5+5 MHz polar mode). L-band air-surveillance radars (1215-1400 MHz, FAA/USAF
-  ARSR-4 and others) appear when their channel falls inside the recorded band.
+- NISAR L-band main band (frequency A) records 1219-1239 MHz (20 MHz mode), 1219-1259 MHz
+  (40 MHz) or 1219-1296 MHz (77 MHz), plus usually a side band (frequency B) at 1291-1296 MHz.
+  The rarer 5+5 mode records 1219-1224 and 1234-1239 MHz, and 20+20 adds 1276-1296 MHz (table in
+  `nisar.md`). GPS L2 (1227.6 MHz) is inside the main band in the 20, 40 and 77 MHz modes, not in
+  5+5. L-band air-surveillance radars (1215-1400 MHz, FAA/USAF ARSR-4 and others) appear when their
+  channel falls inside the recorded band.
 - Sentinel-1 C-band records about 5.355-5.455 GHz. It cannot see GNSS jammers (no GNSS frequency is
   in its band). It sees C-band radars such as Patriot (AN/MPQ-53/65) and some naval and air-defence
   radars, and other C-band SARs. Claims that Sentinel-1 shows GPS jamming are wrong unless the
@@ -20,20 +22,34 @@ images, "glows", "blobs" or "streaks" in SAR, or the NISAR RFI filter.
   along-track position says the emitter was in the antenna beam at that moment, so the emitter lies
   near a line across the swath at that azimuth time; range tells you almost nothing. A fix needs
   crossing lines from other passes (ascending x descending, or adjacent tracks).
-- NISAR: usually a roughly round blob tens of km across (sometimes elongated, or with stripes),
-  clearest in HV. NISAR's receive beam steps across the swath as each echo arrives, so it hears an
-  emitter only while pointing near it; the blob sits around the emitter. One pass gives a 2-D position.
+- NISAR: usually a roughly round blob tens of km across (sometimes elongated, or with sharp bands
+  along the range direction), clearest in HV, because interference shows best against weak
+  cross-pol returns (ASF). NISAR's receive beam steps across the swath as each echo arrives, so it
+  hears an emitter only while pointing near it; the blob sits around the emitter. One pass gives a
+  2-D position. Interferograms show it as decorrelation.
+- Not every NISAR streak is interference: BETA products have calibration banding and parallel
+  streaks over very dark areas (lakes, sand), especially in HV, and PROVISIONAL SLCs can show faint
+  ripples over dark backgrounds (`nisar.md`, known issues).
+- No-login first look: the Worldview/GIBS NISAR mosaic (URL in `nisar.md`) puts HV in green, so
+  a strong blob shows as a saturated green patch (Kaliningrad, 4 Sep 2026). It has PROVISIONAL
+  (filtered) data only, so filtered radars won't show.
 - Hills inside a NISAR blob are probably a processing effect: GCOV's terrain correction applied to
   an even glow stamps the elevation model's slope pattern onto it (r = -0.86 between blob detail and
   the product's `rtcGammaToSigmaFactor` at Vladivostok). Don't read them as reflected RF.
 
 ## NISAR's RFI filter (tone-rank) and what it means for detection
 
-- BETA products (passes Oct 2025-Jan 2026): detection only, nothing removed. Interference stays in
+- BETA products (a subset of passes, Oct 2025-Jan 2026): detection only, nothing removed. Interference stays in
   the image, but whether an emitter shows still depends on its frequency, whether it was transmitting
   toward the satellite, its strength, the geometry and the background: only 11 of 40 ARSR-4 sites
   showed a clear blob. No blob does not mean no transmitter.
-- PROVISIONAL (from mid-2026): tone-rank works on raw echoes before imaging. In blocks of 512 pulses
+- PROVISIONAL (every pass from 17 June 2026, plus selected frames back to Oct 2025): the filter
+  was turned on with CRID P05023. The RSLC names the algorithm
+  (`processingInformation/algorithms/rfiMitigation`, printed by `rfimeta`). It was `tone-rank` in
+  every product we checked, dithered and fixed-PRF; the CRID notes also mention an ST-EVD method
+  for dithered-PRF mode, so check the name before applying the description below. ASF: the filter
+  "underperforms in some places by leaving residual RFI, or overperforms by removing features in
+  high contrast areas". Tone-rank works on raw echoes before imaging. In blocks of 512 pulses
   it splits each 1,024-sample segment into frequency slices, estimates the typical level from the
   median, flags single pulse x slice cells about 9 dB above the estimated mean (12 dB above the
   median), and fills them from the neighbouring pulses.
@@ -88,7 +104,9 @@ Synopsis in SKILL.md; `--help` lists every option.
 
 **Is there a transmitter near X, and where exactly?**
 1. `nisartool.py scenes` over X. Prefer BETA passes for radars (unfiltered); any release for
-   always-on broadband sources.
+   always-on broadband sources. BETA covers only some passes before 20 Jan 2026. Unfiltered data
+   for later passes exists only as raw L0B (RRSD, public since July 2026), which the tool doesn't
+   read.
 2. `blobs` around X on one or more passes. Report the brightest point (and centre if the blob fits),
    the peak in dB above background, the pass time and the tested accuracy (above). Agreement
    between passes has not been tested: two estimates can each be within 8 km yet 16 km apart, so
@@ -121,5 +139,20 @@ Shiraz); the NISAR blob centre is the better method.
 - Give positions with the method and its tested accuracy ("brightest point of the blob; within
   ~8 km of known radars in 13 of 14 tests"), not more precision than that.
 - Say what the radar can't tell you (emitter type, purpose) and what corroborates it.
-- Credit: "Contains NASA-ISRO NISAR data, NASA/JPL-Caltech/ISRO, distributed by ASF DAAC" and/or
-  "Contains modified Copernicus Sentinel data [year]".
+- Credit: "Contains NASA-ISRO NISAR data, NASA/JPL-Caltech/ISRO, distributed by ASF DAAC" (cite
+  the collection DOI in a report, see `nisar.md`) and/or "Contains modified Copernicus Sentinel
+  data [year]".
+
+## Sources
+
+NISAR: ASF NISAR Data User Guide, read in full Oct 2026:
+[About NISAR](https://nisar-docs.asf.alaska.edu/nisar-intro/) (frequencies by mode),
+[PROVISIONAL known issues](https://nisar-docs.asf.alaska.edu/provisional-known-issues/) (filter
+residuals and over-removal), [BETA known issues](https://nisar-docs.asf.alaska.edu/product-known-issues/)
+(what RFI looks like, non-RFI streaks), [Glossary](https://nisar-docs.asf.alaska.edu/glossary/)
+(RFI detection on L0B before focusing), and the
+[CRID release notes](https://www.earthdata.nasa.gov/data/platforms/space-based-platforms/nisar/nisar-composite-release-id-crid)
+(P05023 turned on tone-rank; ST-EVD for dithered PRF). The tone-rank internals (512-pulse blocks,
+thresholds) come from the open-source isce3 implementation
+(https://github.com/isce-framework/isce3), not ASF, and every tested accuracy figure comes from our
+own tests (`validation.md`).

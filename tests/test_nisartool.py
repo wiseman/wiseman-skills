@@ -154,6 +154,22 @@ class NisarTests(unittest.TestCase):
         self.assertEqual(result['A']['frequency_bins_used'], 64)
         self.assertEqual(result['A']['flag_hotspots'], [])
 
+    def test_release_follows_crid_number_not_letter(self):
+        name = lambda crid: GRANULE.replace('P05023', crid)
+        self.assertEqual(nt.parse_name(name('X05010'))['release'], 'beta')
+        self.assertEqual(nt.parse_name(name('P05023'))['release'], 'provisional')
+        self.assertEqual(nt.parse_name(name('X05026'))['release'], 'provisional')
+
+    def test_scenes_keeps_latest_product_counter(self):
+        old, new = GRANULE, GRANULE[:-3] + '002'
+        args = SimpleNamespace(lat=54.7, lon=20.5, start='2026-01-01', end='2026-01-31', release='any', all_modes=False)
+        out = io.StringIO()
+        with mock.patch.object(nt, 'cmr', return_value=[{'title': new}, {'title': old}]), contextlib.redirect_stdout(out):
+            nt.cmd_scenes(args)
+        self.assertIn(new, out.getvalue())
+        self.assertNotIn(old + '\n', out.getvalue())
+        self.assertIn('1 pass(es)', out.getvalue())
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

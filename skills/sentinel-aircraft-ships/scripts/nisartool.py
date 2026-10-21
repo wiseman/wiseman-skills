@@ -39,7 +39,8 @@ SHORT = {('GCOV', 'provisional'): 'NISAR_L2_GCOV_PROVISIONAL_V1', ('GCOV', 'beta
          ('RSLC', 'provisional'): 'NISAR_L1_RSLC_PROVISIONAL_V1', ('RSLC', 'beta'): 'NISAR_L1_RSLC_BETA_V1'}
 # polarisation code (first two letters for frequency A, next two for B) -> like-pol first, then cross-pol
 POLS = {'DH': ['HH', 'HV'], 'QP': ['HH', 'HV'], 'DV': ['VV', 'VH'], 'SH': ['HH'], 'SV': ['VV']}
-POSTING = {0: 'frequency B only, GCOV 80 m', 20: 'GSLC 10x5 m, GCOV 20 m', 40: 'GSLC 5x5 m, GCOV 10 m', 77: 'GSLC 2.5x5 m, GCOV 20 m'}
+POSTING = {0: 'frequency B only, GCOV 80 m', 5: 'GSLC 40x5 m, GCOV 80 m', 20: 'GSLC 10x5 m, GCOV 20 m',
+           40: 'GSLC 5x5 m, GCOV 10 m', 77: 'GSLC 2.5x5 m, GCOV 20 m'}
 CREDIT = 'Contains NASA-ISRO NISAR data, NASA/JPL-Caltech/ISRO, distributed by ASF DAAC.'
 BLOCK_M, SMOOTH_M = 200.0, 2000.0      # blob search: 200 m blocks, 2 km Gaussian smoothing
 CROP_MAX_M = 20000                     # crops are for looking at things, not frames
@@ -78,8 +79,9 @@ def cache_path(key):
 
 def parse_name(g):
     """Fields of a NISAR granule name (JPL D-102255): product, track, direction, frame, mode
-    (bandwidth of frequency A and B in MHz), polarisations, start time, release (from the CRID:
-    X... = BETA, otherwise PROVISIONAL)."""
+    (bandwidth of frequency A and B in MHz), polarisations, start time, release. ASF: PROVISIONAL
+    products have CRID 05023 or higher, BETA lower; the letter is not the release (X = experimental
+    build, and some X05026 products are in the PROVISIONAL collection, RFI-filtered)."""
     p = g.split('_')
     if len(p) < 15 or p[0] != 'NISAR':
         die(f'{g}: not a NISAR granule name (they start NISAR_L2_PR_GCOV_...; get them from `scenes`)')
@@ -87,7 +89,7 @@ def parse_name(g):
     return {'product': p[3], 'track': p[5], 'dir': 'ascending' if p[6] == 'A' else 'descending',
             'frame': p[7], 'bw_a': int(mode[:2]), 'bw_b': int(mode[2:]), 'pols': p[9],
             'start': dt.datetime.strptime(p[11], '%Y%m%dT%H%M%S').replace(tzinfo=dt.timezone.utc),
-            'release': 'beta' if p[13].startswith('X') else 'provisional'}
+            'release': 'beta' if int(p[13][1:]) < 5023 else 'provisional'}
 
 
 def pols_of(g, freq='A'):
@@ -264,11 +266,12 @@ def cmd_scenes(a):
     start = a.start if 'T' in a.start else a.start + 'T00:00:00Z'
     end = a.end if 'T' in a.end else a.end + 'T23:59:59Z'
     rels = ['provisional', 'beta'] if a.release == 'any' else [a.release]
-    rows = []
+    latest = {}  # a reprocessed acquisition appears again with a higher product counter (_002); keep the latest
     for e in cmr({'short_name[]': [SHORT[('GCOV', r)] for r in rels], 'point': f'{a.lon},{a.lat}', 'temporal': f'{start},{end}'}):
-        if e['title'].startswith('NISAR_'):
-            rows.append((e['title'], parse_name(e['title'])))
-    rows.sort(key=lambda r: r[1]['start'])
+        g = e['title']
+        if g.startswith('NISAR_') and g > latest.get(g[:-4], ''):
+            latest[g[:-4]] = g
+    rows = sorted(((g, parse_name(g)) for g in latest.values()), key=lambda r: r[1]['start'])
     shown = 0
     for g, n in rows:
         if not a.all_modes and n['bw_a'] == 0:
@@ -284,8 +287,9 @@ def cmd_scenes(a):
         shown += 1
     if not shown:
         print('No NISAR GCOV granules over this point in that period (try --release any, a longer period, or --all-modes).')
-    print(f'\n{shown} pass(es). BETA covers passes from Oct 2025 to Jan 2026 and is uncalibrated, with no RFI removed; '
-          'PROVISIONAL (from mid-2026) is calibrated and RFI-filtered. Public browse image of a granule: '
+    print(f'\n{shown} pass(es). BETA: a subset of passes from Oct 2025 to Jan 2026, uncalibrated, no RFI removed. '
+          'PROVISIONAL: every pass from 17 Jun 2026 plus selected frames back to Oct 2025, calibrated and RFI-filtered; '
+          'no data 27 Jul-10 Aug 2026. Public browse image of a granule: '
           f'{DATA}/BROWSE/<SHORT_NAME>/<GRANULE>/<GRANULE>_LATLON.png (PROVISIONAL) or <GRANULE>.png (BETA).')
 
 

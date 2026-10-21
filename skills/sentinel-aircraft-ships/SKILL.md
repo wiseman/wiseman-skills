@@ -305,8 +305,9 @@ GRANULE is a name from `scenes` (any of GCOV, GSLC, RSLC; each command switches 
 work: they hold the modes, releases, accuracy and traps. Key points:
 - Pixels: 5 m (GSLC) in the 40 MHz mode over North America and parts of Asia; 10 x 5 m elsewhere on
   land. Passes near 06:00 and 18:00 local solar time, about twice per 12 days per area.
-- Two releases: BETA (passes Oct 2025-Jan 2026: uncalibrated, nothing removed by the RFI filter) and
-  PROVISIONAL (from mid-2026: calibrated, RFI filtered). The filter removes radar blobs from images
+- Two releases: BETA (a subset of passes Oct 2025-Jan 2026: uncalibrated, nothing removed by the
+  RFI filter) and PROVISIONAL (every pass from 17 June 2026 plus selected frames back to Oct 2025:
+  calibrated, RFI filtered; no data 27 Jul-10 Aug 2026). The filter removes radar blobs from images
   but not always-on broadband interference (Kaliningrad, Vladivostok); its record stays in RSLC and
   shows that a removed emitter was there and its frequency, but places it only roughly (tens of km).
 - Parked aircraft: rows of large aircraft in the open are visible; aircraft at gates are lost in
@@ -320,6 +321,9 @@ work: they hold the modes, releases, accuracy and traps. Key points:
   flag analysis was unavailable after tone exclusion, not that no emitter was present. The full
   spectrum and available level hotspots still help; interpretation is in `references/rfi.md`.
 - Streaming windows takes seconds to a couple of minutes; never download whole files (1.5-26 GB).
+  Without a login, NASA Worldview/GIBS has daily 15.6 m false-colour mosaics of PROVISIONAL data
+  (URL in `references/nisar.md`) that show aircraft rows and strong interference.
+- Quad-pol (`QP`) passes have bands of missing data across the swath.
 - Credit: "Contains NASA-ISRO NISAR data, NASA/JPL-Caltech/ISRO, distributed by ASF DAAC."
 
 ## Limits
